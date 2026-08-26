@@ -1,0 +1,864 @@
+<title>CHM13 Word Atlas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,540;9..144,640&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#faf9f6; --card:#ffffff; --ink:#171916; --ink2:#5c5b55; --muted:#8b897f;
+  --hair:#e5e3da; --hair2:#d5d3c8; --chip:#f1efe8; --noise:#d9d7cd;
+  --heat0:#f4f2ec; --heat1:#123c78; --ring:#171916;
+  --shadow:0 1px 2px rgba(20,20,16,.05),0 4px 16px rgba(20,20,16,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#111312; --card:#191c1a; --ink:#e8e6df; --ink2:#a5a399; --muted:#807e74;
+    --hair:#2a2d2a; --hair2:#3a3d39; --chip:#222522; --noise:#3a3d39;
+    --heat0:#15181a; --heat1:#7db4ff; --ring:#e8e6df;
+    --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 18px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#111312; --card:#191c1a; --ink:#e8e6df; --ink2:#a5a399; --muted:#807e74;
+  --hair:#2a2d2a; --hair2:#3a3d39; --chip:#222522; --noise:#3a3d39;
+  --heat0:#15181a; --heat1:#7db4ff; --ring:#e8e6df;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 4px 18px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:15px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;}
+.wrap{max-width:1240px;margin:0 auto;padding:0 28px 90px}
+header{padding:52px 0 8px}
+.eyebrow{font:12px/1.4 "IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+  letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+.eyebrow b{color:var(--ink2);font-weight:500}
+h1{font-family:"Fraunces",Georgia,serif;font-weight:640;font-size:clamp(34px,5vw,54px);
+  line-height:1.04;margin:10px 0 14px;letter-spacing:-.01em;text-wrap:balance}
+.thesis{max-width:64ch;color:var(--ink2);font-size:16px;margin:0 0 26px}
+.thesis em{color:var(--ink);font-style:normal;font-weight:600}
+.metric-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:10px;margin:0 0 8px}
+.metric{background:var(--card);border:1px solid var(--hair);border-radius:10px;
+  padding:12px 14px;box-shadow:var(--shadow)}
+.metric .v{font-family:"Fraunces",Georgia,serif;font-weight:640;font-size:26px;line-height:1.1}
+.metric .s{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+h2{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:26px;margin:64px 0 6px;
+  letter-spacing:-.005em}
+.lede{color:var(--ink2);max-width:72ch;margin:0 0 18px;font-size:14.5px}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0 12px}
+.seg{display:flex;background:var(--chip);border:1px solid var(--hair);border-radius:9px;
+  padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;color:var(--ink2);font:12.5px/1 "IBM Plex Sans",sans-serif;
+  font-weight:500;padding:7px 11px;border-radius:6px;cursor:pointer}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--card);color:var(--ink);
+  box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.ghost{border:1px solid var(--hair2);background:transparent;color:var(--ink2);
+  font:12.5px/1 "IBM Plex Sans",sans-serif;padding:8px 12px;border-radius:9px;cursor:pointer}
+.ghost:hover{color:var(--ink);border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 10px;margin:2px 0 12px;min-height:22px}
+.lchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);
+  cursor:pointer;border:0;background:none;padding:2px 4px;border-radius:6px;
+  font-family:inherit}
+.lchip:hover{color:var(--ink)}
+.lchip.on{color:var(--ink);font-weight:600}
+.lchip .sw{width:10px;height:10px;border-radius:3px;flex:none}
+.gradbar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.gradbar canvas{border-radius:4px;border:1px solid var(--hair)}
+.panes{display:grid;grid-template-columns:minmax(340px,460px) 1fr;gap:18px}
+@media (max-width:900px){.panes{grid-template-columns:1fr}}
+.pane{background:var(--card);border:1px solid var(--hair);border-radius:14px;
+  padding:14px;box-shadow:var(--shadow);position:relative}
+.pane h3{margin:0 0 2px;font-size:13px;font-weight:600}
+.pane .sub{font-size:11.5px;color:var(--muted);margin:0 0 10px}
+canvas.plot{width:100%;display:block;border-radius:8px;cursor:crosshair;
+  touch-action:none}
+.maptools{position:absolute;top:10px;right:12px;display:flex;gap:5px;z-index:5}
+.maptools button{border:1px solid var(--hair2);background:var(--card);color:var(--ink2);
+  font:11.5px/1 "IBM Plex Sans",sans-serif;padding:6px 9px;border-radius:8px;cursor:pointer}
+.maptools button:hover{color:var(--ink);border-color:var(--muted)}
+.maptools button[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);font-weight:600}
+#tooltip{position:fixed;z-index:30;pointer-events:none;background:var(--card);
+  border:1px solid var(--hair2);border-radius:9px;box-shadow:var(--shadow);
+  padding:9px 11px;font-size:12px;display:none;max-width:260px;line-height:1.5}
+#tooltip .loc{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink)}
+#tooltip .row{color:var(--ink2)}
+#tooltip .row b{color:var(--ink);font-weight:600}
+#card{background:var(--card);border:1px solid var(--hair);border-radius:14px;
+  box-shadow:var(--shadow);padding:16px 18px;margin-top:16px;display:none}
+#card .name{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:19px;
+  display:flex;align-items:center;gap:9px}
+#card .name .sw{width:13px;height:13px;border-radius:4px}
+#card .facts{display:flex;flex-wrap:wrap;gap:5px 22px;margin-top:8px;font-size:13px;
+  color:var(--ink2)}
+#card .facts b{color:var(--ink);font-weight:600}
+.heatwrap{display:grid;grid-template-columns:minmax(300px,700px) minmax(220px,1fr);
+  gap:18px;align-items:start}
+@media (max-width:900px){.heatwrap{grid-template-columns:1fr}}
+#heatreadout{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink2);
+  min-height:40px;line-height:1.6}
+#heatreadout b{color:var(--ink)}
+.figgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.fig{background:var(--card);border:1px solid var(--hair);border-radius:14px;
+  padding:12px;box-shadow:var(--shadow)}
+.fig img{width:100%;border-radius:8px;display:block;background:#fcfcfb}
+.fig .cap{font-size:12.5px;color:var(--ink2);margin-top:9px;line-height:1.5}
+.fig .cap b{color:var(--ink)}
+.tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--hair);
+  border-radius:14px;box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:760px}
+th{font:11px/1.3 "IBM Plex Sans",sans-serif;font-weight:600;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--muted);text-align:left;padding:11px 12px;
+  border-bottom:1px solid var(--hair);cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--ink)}
+td{padding:8px 12px;border-bottom:1px solid var(--hair);color:var(--ink2);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr{cursor:pointer}
+tbody tr:hover td{color:var(--ink)}
+tbody tr.sel td{background:var(--chip);color:var(--ink)}
+td .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;
+  vertical-align:-1px}
+.methods{display:grid;grid-template-columns:2fr 1fr;gap:26px;max-width:1020px}
+@media (max-width:800px){.methods{grid-template-columns:1fr}}
+.methods p{color:var(--ink2);font-size:14px;max-width:66ch}
+.methods b{color:var(--ink)}
+.paramtbl{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink2);
+  border:1px solid var(--hair);border-radius:12px;padding:14px 16px;background:var(--card)}
+.paramtbl div{display:flex;justify-content:space-between;gap:16px;padding:3px 0}
+.paramtbl span:last-child{color:var(--ink)}
+footer{margin-top:70px;padding-top:18px;border-top:1px solid var(--hair);
+  font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 24px}
+footer a{color:var(--ink2)}
+@media (prefers-reduced-motion: no-preference){
+  .metric,.pane,.fig{transition:border-color .15s}
+}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">T2T-CHM13v2.0 · alignment-free · <b id="eb-k">k = 21</b> · a word looks like <b>TCGGATTACACCGTGGAATCG</b></div>
+  <h1>CHM13 Word Atlas</h1>
+  <p class="thesis">A map of the complete human genome in which position is decided purely by
+  <em>k&#8209;mer vocabulary</em> — no aligner, no reference coordinate, no orthology.
+  Every dot is a 100&nbsp;kb bin, sketched by FracMinHash, embedded by randomized SVD&nbsp;→&nbsp;UMAP,
+  grouped by HDBSCAN. Bins land next to each other because they use the same words.
+  Annotation judges the map; it never builds it.</p>
+  <div class="metric-strip" id="metrics"></div>
+</header>
+
+<h2>Map ↔ territory</h2>
+<p class="lede">The map is the UMAP plane; the territory is the genome in its own coordinates.
+Hover either side and the other answers. Click a dot, a stripe, a legend chip, or a table row to
+isolate one cluster. Pinch or double-click to zoom the map, drag to pan, and shift-drag (or the
+⬚&nbsp;select tool) to box a region — the territory and a region report answer. Press
+<span style="font-family:'IBM Plex Mono',monospace">esc</span> to release a selection.</p>
+<div class="controls">
+  <div class="seg" id="modes" role="group" aria-label="color by"></div>
+  <button class="ghost" id="clearsel" hidden>clear selection</button>
+</div>
+<div class="legend" id="legend"></div>
+<div class="panes">
+  <div class="pane">
+    <h3>The map</h3>
+    <p class="sub" id="map-sub">UMAP of bins — cosine on SVD of the shared-vocabulary matrix</p>
+    <div class="maptools">
+      <button id="mt-box" aria-pressed="false" title="drag a box to select a region (or hold shift and drag)">⬚ select</button>
+      <button id="mt-out" title="zoom out">−</button>
+      <button id="mt-in" title="zoom in">+</button>
+      <button id="mt-reset" title="reset view">reset</button>
+    </div>
+    <canvas id="map" class="plot"></canvas>
+  </div>
+  <div class="pane">
+    <h3>The territory</h3>
+    <p class="sub">chromosomes 1–22, X, Y — each stripe painted by the same colors as the map</p>
+    <canvas id="ribbon" class="plot"></canvas>
+  </div>
+</div>
+<div id="card"></div>
+
+<h2>Distance, exactly</h2>
+<p class="lede">The map above is a model. This is not: every pair of 1&nbsp;Mb bins compared by exact
+sketch intersection. The matrix shows exact Jaccard (∛-stretched so faint structure survives);
+the dendrogram ordering and pairwise clusters use max-containment ANI,
+<span style="font-family:'IBM Plex Mono',monospace">cANI&nbsp;=&nbsp;C<sup>1/k</sup></span>, which is
+robust to the wild sketch-size differences between satellite and unique sequence. In genome order
+the diagonal blocks are chromosomes; flip to dendrogram order and the satellite families reassemble
+from across the genome. Hover for the pair behind any pixel.</p>
+<div class="controls">
+  <div class="seg" id="heatorder" role="group" aria-label="heatmap order">
+    <button aria-pressed="true" data-o="genome">genome order</button>
+    <button aria-pressed="false" data-o="leaf">dendrogram order</button>
+  </div>
+</div>
+<div class="heatwrap">
+  <div class="pane"><canvas id="heat" class="plot"></canvas></div>
+  <div>
+    <div id="heatreadout">hover the matrix…</div>
+    <p class="lede" style="margin-top:14px">Off-diagonal constellations in genome order are the
+    biology: acrocentric short arms quoting each other, segmental duplications, satellite families
+    shared between chromosomes.</p>
+  </div>
+</div>
+
+<h2>How much should you trust it?</h2>
+<p class="lede">Four stress tests. The two-way test is the important one: alpha-satellite HOR bins
+should be <b>strongly identifiable by chromosome</b> from vocabulary alone (arrays are
+chromosome-specific), while rDNA bins should be <b>far weaker</b> (the arrays recombine across the
+five acrocentrics). Both directions come out as biology predicts — αSat sits an order of magnitude
+above chance, rDNA barely doubles it — and the αSat confusions that do occur are the known shared
+HOR families. A method that secretly encodes position would ace both; one blind to fine vocabulary
+would fail the first.</p>
+<div class="figgrid" id="figs"></div>
+
+<h2>The clusters</h2>
+<p class="lede" id="cluster-lede"></p>
+<div class="tablewrap"><table id="ctable"></table></div>
+
+<h2>Method</h2>
+<div class="methods">
+  <div>
+    <p><b>Sketch.</b> Every 100 kb bin of CHM13v2.0 (chr1–22, X, Y) is reduced to a FracMinHash
+    sketch: canonical 21-mers hashed with MurmurHash3-x64-128 (seed 42), kept when
+    hash ≤ 2<sup>64</sup>/scaled — bit-identical to sourmash, verified by test. The base store keeps
+    scaled=20 with within-bin multiplicities; every coarser sketch is a subset of it.</p>
+    <p><b>Model (track A).</b> Bins × shared-hashes matrix at scaled=50; hashes private to one bin
+    are dropped from the model (each bin's private fraction is kept as a diagnostic — color the map
+    by it). Weights log1p(multiplicity) × mild IDF, L2-normalized; randomized subspace SVD on the
+    implicit Gram operator; UMAP (cosine) for display; HDBSCAN in a 12-d UMAP space for clusters.</p>
+    <p><b>Distance (track B).</b> Bins boosted to 1 Mb so sketches are deep enough that pairwise
+    Jaccard and containment are essentially exact, then one sparse matmul gives all
+    ~4.9 M pairs. The two tracks agree or the model is wrong — that agreement is measured, not assumed.</p>
+    <p><b>Judged by</b> the T2T censat v2.1, segdup, and RepeatMasker tracks, which color and score
+    the finished map but contribute nothing to it.</p>
+  </div>
+  <div class="paramtbl" id="params"></div>
+</div>
+
+<footer>
+  <span>kmer_clust · built end-to-end on one laptop</span>
+  <span>genome: T2T-CHM13v2.0 analysis set</span>
+  <span>annotation: censat v2.1 · SD · RepeatMasker 4.1.2p1</span>
+  <span><a href="https://github.com/jlanej/kmer_clust">github.com/jlanej/kmer_clust</a></span>
+</footer>
+</div>
+<div id="tooltip"></div>
+
+<script>
+"use strict";
+const P = /*__PAYLOAD__*/null;
+if (!P) { document.body.insertAdjacentHTML("beforeend", "<p style='padding:2em'>payload missing — run `make site`</p>"); throw new Error("no payload"); }
+
+/* ---------- decode ---------- */
+function bytes(b64){ const s=atob(b64); const u=new Uint8Array(s.length);
+  for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+const A = {};
+for (const [k,v] of Object.entries(P.arrays)) A[k] = bytes(v);
+const N = P.meta.n;
+const qx = new Uint16Array(A.qx.buffer), qy = new Uint16Array(A.qy.buffer);
+const cluster = new Int16Array(A.cluster.buffer);
+const chrom = A.chrom, censat = A.censat;
+const [X0,X1] = P.meta.x_range, [Y0,Y1] = P.meta.y_range;
+const chromOff = []; { let o=0; for (const nb of P.meta.chrom_nbins){ chromOff.push(o); o+=nb; } }
+const binMb = P.meta.bin_bp/1e6;
+
+/* ---------- palettes ---------- */
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const clColor = {}; for (const [k,v] of Object.entries(P.clusters.colors)) clColor[+k]=v;
+const cenColor = P.censat_colors;
+const CEN = P.meta.censat_classes;
+const SLOTS = ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#4a3aa7","#e34948"];
+function shade(hex,f){ const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+  const m=v=>Math.max(0,Math.min(255,Math.round(v*f+(f>1?24:0))));
+  return `rgb(${m(r)},${m(g)},${m(b)})`; }
+const chromColor = P.meta.chroms.map((c,i)=> shade(SLOTS[i%8], [1,0.72,1.35][Math.floor(i/8)]));
+function lerp(a,b,t){ return a+(b-a)*t; }
+function hexRgb(h){ return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]; }
+function rampColor(t, lo, hi){ const a=hexRgb(lo), b=hexRgb(hi);
+  return `rgb(${Math.round(lerp(a[0],b[0],t))},${Math.round(lerp(a[1],b[1],t))},${Math.round(lerp(a[2],b[2],t))})`; }
+const RAMP = ["#cde2fb","#0d366b"], RAMP_D = ["#16324f","#9ec5f4"];
+const isDark = () => {
+  const t = document.documentElement.getAttribute("data-theme");
+  if (t==="dark") return true; if (t==="light") return false;
+  return matchMedia("(prefers-color-scheme: dark)").matches;
+};
+const ramp = t => { const [lo,hi] = isDark()? RAMP_D : RAMP; return rampColor(t,lo,hi); };
+
+/* ---------- color modes ---------- */
+const MODES = [
+  {id:"cluster",  label:"cluster"},
+  {id:"censat",   label:"satellite class"},
+  {id:"chrom",    label:"chromosome"},
+  {id:"gc",       label:"GC"},
+  {id:"private",  label:"private vocabulary"},
+  {id:"sd",       label:"segdup"},
+  {id:"pos",      label:"position"},
+];
+let mode = "cluster";
+let sel = null;            // {type:"cluster"|"censat", id}
+let hoverIdx = -1;
+function pointColor(i){
+  switch(mode){
+    case "cluster": { const c=cluster[i]; return c<0 ? css("--noise") : (clColor[c]||"#999"); }
+    case "censat": { const cls=CEN[censat[i]]; return cls==="non_sat"? css("--noise") : (cenColor[cls]||css("--noise")); }
+    case "chrom": return chromColor[chrom[i]];
+    case "gc": return ramp(A.gc[i]/255);
+    case "private": return ramp(A.private[i]/255);
+    case "sd": return ramp(A.sd[i]/255);
+    case "pos": { const local=(i-chromOff[chrom[i]])/P.meta.chrom_nbins[chrom[i]]; return ramp(0.08+0.9*local); }
+  }
+}
+function inSel(i){
+  if (!sel) return true;
+  if (sel.type==="bins") return !!sel.mask[i];
+  if (sel.type==="cluster") return cluster[i]===sel.id;
+  return CEN[censat[i]]===sel.id;
+}
+
+/* ---------- scatter ---------- */
+const map = document.getElementById("map"), mctx = map.getContext("2d");
+let mw, mh, dpr = Math.min(devicePixelRatio||1, 2);
+function sizeCanvas(cv, cssH){ const r = cv.getBoundingClientRect();
+  cv.width = Math.round(r.width*dpr); cv.height = Math.round(cssH*dpr);
+  cv.style.height = cssH+"px"; return [r.width, cssH]; }
+const PAD = 8;
+let vs=1, vtx=0, vty=0;   // map view: scale + translation, CSS px
+function bpx(i){ return PAD + (qx[i]/65535)*(mw-2*PAD); }
+function bpy(i){ return PAD + (1-qy[i]/65535)*(mh-2*PAD); }
+function px(i){ return vtx + vs*bpx(i); }
+function py(i){ return vty + vs*bpy(i); }
+function clampView(){
+  if (vs<=1.001){ vs=1; vtx=0; vty=0; return; }
+  vs=Math.min(vs,40);
+  vtx=Math.min(0, Math.max(mw-vs*mw, vtx));
+  vty=Math.min(0, Math.max(mh-vs*mh, vty));
+}
+function zoomAt(mx,my,factor){
+  const ns=Math.min(40, Math.max(1, vs*factor));
+  const f=ns/vs;
+  vtx = mx - f*(mx-vtx);
+  vty = my - f*(my-vty);
+  vs = ns;
+  clampView();
+  mapBase=null; drawMap();
+}
+let mapBase=null, ribBase=null;
+function invalidate(){ mapBase=null; ribBase=null; }
+function renderMapBase(){
+  mapBase=document.createElement("canvas"); mapBase.width=map.width; mapBase.height=map.height;
+  const c=mapBase.getContext("2d"); c.setTransform(dpr,0,0,dpr,0,0);
+  const r = 1.35*Math.min(Math.pow(vs,0.4), 2.6);
+  if (sel){ // ghost color, not alpha: overlapping translucent points re-saturate
+    c.fillStyle = css("--noise");
+    for(let i=0;i<N;i++){ if(inSel(i)) continue;
+      c.fillRect(px(i)-r, py(i)-r, 2*r, 2*r); }
+    for(let i=0;i<N;i++){ if(!inSel(i)) continue;
+      c.fillStyle = pointColor(i); c.fillRect(px(i)-r-0.2, py(i)-r-0.2, 2*r+0.4, 2*r+0.4); }
+  } else {
+    for(let i=0;i<N;i++){ c.fillStyle = pointColor(i);
+      c.fillRect(px(i)-r, py(i)-r, 2*r, 2*r); }
+  }
+}
+function drawMap(){
+  if(!mapBase) renderMapBase();
+  mctx.setTransform(1,0,0,1,0,0);
+  mctx.clearRect(0,0,map.width,map.height);
+  mctx.drawImage(mapBase,0,0);
+  mctx.setTransform(dpr,0,0,dpr,0,0);
+  if (hoverIdx>=0){
+    mctx.strokeStyle = css("--ring"); mctx.lineWidth = 1.6;
+    mctx.beginPath(); mctx.arc(px(hoverIdx), py(hoverIdx), 6, 0, 7); mctx.stroke();
+  }
+  if (drag && drag.type==="box" && drag.moved){
+    const x=Math.min(drag.x0,drag.x1), y=Math.min(drag.y0,drag.y1);
+    const w=Math.abs(drag.x1-drag.x0), h=Math.abs(drag.y1-drag.y0);
+    mctx.fillStyle = css("--ring"); mctx.globalAlpha = 0.06;
+    mctx.fillRect(x,y,w,h);
+    mctx.globalAlpha = 1;
+    mctx.strokeStyle = css("--ring"); mctx.lineWidth = 1.2;
+    mctx.setLineDash([5,4]); mctx.strokeRect(x,y,w,h); mctx.setLineDash([]);
+  }
+}
+/* spatial grid for hover */
+const GB = 96; let grid;
+function buildGrid(){ grid = Array.from({length:GB*GB},()=>[]);
+  for(let i=0;i<N;i++){ const gx=Math.min(GB-1,Math.floor(qx[i]/65536*GB)),
+    gy=Math.min(GB-1,Math.floor(qy[i]/65536*GB)); grid[gy*GB+gx].push(i); } }
+function nearest(mx,my){
+  const bx=(mx-vtx)/vs, by=(my-vty)/vs;   // back to base coords for the grid
+  const ux = (bx-PAD)/(mw-2*PAD)*65535, uy = (1-(by-PAD)/(mh-2*PAD))*65535;
+  const gx = Math.max(0,Math.min(GB-1,Math.floor(ux/65536*GB))),
+        gy = Math.max(0,Math.min(GB-1,Math.floor(uy/65536*GB)));
+  let best=-1, bd=Infinity;
+  for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+    const cx=gx+dx, cy=gy+dy; if(cx<0||cy<0||cx>=GB||cy>=GB) continue;
+    for(const i of grid[cy*GB+cx]){
+      const dxp=px(i)-mx, dyp=py(i)-my, d=dxp*dxp+dyp*dyp;
+      if(d<bd){bd=d;best=i;} } }
+  return bd<=110? best : -1;
+}
+
+/* ---------- ribbon ---------- */
+const rib = document.getElementById("ribbon"), rctx = rib.getContext("2d");
+let rw, rh; const ROWH=26, RLAB=34, RTOP=4;
+const maxMb = Math.max(...P.meta.chrom_nbins)*binMb;
+function ribX(mb){ return RLAB + mb/maxMb*(rw-RLAB-6); }
+function renderRibBase(){
+  ribBase=document.createElement("canvas"); ribBase.width=rib.width; ribBase.height=rib.height;
+  const c2=ribBase.getContext("2d"); c2.setTransform(dpr,0,0,dpr,0,0);
+  c2.font = "10.5px 'IBM Plex Mono', monospace";
+  for(let c=0;c<P.meta.chroms.length;c++){
+    const y = RTOP + c*ROWH, nb = P.meta.chrom_nbins[c], off = chromOff[c];
+    c2.fillStyle = css("--muted");
+    c2.textAlign = "right";
+    c2.fillText(P.meta.chroms[c].replace("chr",""), RLAB-7, y+ROWH*0.62);
+    const wpb = (ribX(nb*binMb)-ribX(0))/nb;
+    const ghost = css("--noise");
+    for(let b=0;b<nb;b++){
+      const i = off+b;
+      c2.fillStyle = (sel && !inSel(i)) ? ghost : pointColor(i);
+      c2.fillRect(ribX(b*binMb), y+4, Math.max(wpb,0.4), ROWH-9);
+    }
+  }
+}
+function drawRibbon(){
+  if(!ribBase) renderRibBase();
+  rctx.setTransform(1,0,0,1,0,0);
+  rctx.clearRect(0,0,rib.width,rib.height);
+  rctx.drawImage(ribBase,0,0);
+  rctx.setTransform(dpr,0,0,dpr,0,0);
+  if (hoverIdx>=0){
+    const c=chrom[hoverIdx], b=hoverIdx-chromOff[c], y=RTOP+c*ROWH;
+    rctx.strokeStyle = css("--ring"); rctx.lineWidth=1.4;
+    rctx.strokeRect(ribX(b*binMb)-1.5, y+2, Math.max((ribX(binMb)-ribX(0)),1)+3, ROWH-5);
+  }
+}
+function ribbonHit(mx,my){
+  const c = Math.floor((my-RTOP)/ROWH);
+  if (c<0||c>=P.meta.chroms.length||mx<RLAB) return -1;
+  const mb = (mx-RLAB)/(rw-RLAB-6)*maxMb;
+  const b = Math.floor(mb/binMb);
+  if (b<0||b>=P.meta.chrom_nbins[c]) return -1;
+  return chromOff[c]+b;
+}
+
+/* ---------- tooltip + linking ---------- */
+const tip = document.getElementById("tooltip");
+const clTable = {}; for (const r of P.clusters.table) clTable[r.cluster]=r;
+function fmtBin(i){
+  const c=P.meta.chroms[chrom[i]], b=i-chromOff[chrom[i]];
+  const s=(b*binMb).toFixed(1), e=((b+1)*binMb).toFixed(1);
+  return `${c}:${s}–${e} Mb`;
+}
+function showTip(evt, i){
+  const cl=cluster[i], cls=CEN[censat[i]];
+  const name = cl<0? "noise" : (clTable[cl]?.name || ("cluster "+cl));
+  tip.innerHTML = `<div class="loc">${fmtBin(i)}</div>
+    <div class="row">cluster <b>${cl<0?"—":cl}</b> · ${name}</div>
+    <div class="row">censat <b>${cls==="non_sat"?"—":cls}</b>${cls==="non_sat"?"":" ("+Math.round(A.censat_frac[i]/2.55)+"%)"}</div>
+    <div class="row">GC <b>${(25+A.gc[i]/255*40).toFixed(1)}%</b> ·
+      segdup <b>${Math.round(A.sd[i]/2.55)}%</b> ·
+      private vocab <b>${Math.round(A.private[i]/2.55)}%</b></div>`;
+  tip.style.display="block";
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  tip.style.left = Math.min(innerWidth-tw-10, evt.clientX+14)+"px";
+  tip.style.top  = Math.max(8, Math.min(innerHeight-th-10, evt.clientY+14))+"px";
+}
+function setHover(i, evt){
+  if (i===hoverIdx && i>=0){ if(evt) showTip(evt,i); return; }
+  hoverIdx=i; drawMap(); drawRibbon();
+  if (i<0) tip.style.display="none"; else if (evt) showTip(evt,i);
+}
+function bindHover(cv, hit){
+  cv.addEventListener("pointermove", e=>{
+    const r=cv.getBoundingClientRect();
+    setHover(hit(e.clientX-r.left, e.clientY-r.top), e);
+  });
+  cv.addEventListener("pointerleave", ()=> setHover(-1));
+  cv.addEventListener("click", e=>{
+    const r=cv.getBoundingClientRect();
+    const i=hit(e.clientX-r.left, e.clientY-r.top);
+    if(i<0) return;
+    if (mode==="censat"){ const cls=CEN[censat[i]];
+      toggleSel(cls==="non_sat"? null : {type:"censat", id:cls}); }
+    else { const c=cluster[i]; toggleSel(c<0? null : {type:"cluster", id:c}); }
+  });
+}
+function toggleSel(s){
+  if (s && sel && s.type!=="bins" && sel.type===s.type && sel.id===s.id) s=null;
+  sel = s;
+  document.getElementById("clearsel").hidden = !sel;
+  invalidate();
+  drawMap(); drawRibbon(); drawCard(); syncLegend(); syncTable();
+}
+document.getElementById("clearsel").onclick = ()=> toggleSel(null);
+addEventListener("keydown", e=>{ if(e.key==="Escape") toggleSel(null); });
+addEventListener("scroll", ()=>{ if(hoverIdx>=0) setHover(-1); }, {passive:true});
+
+/* ---------- cluster card ---------- */
+function drawCard(){
+  const el=document.getElementById("card");
+  if (sel && sel.type==="bins"){
+    const cl={}, cs={}, ch={};
+    let gcS=0, pvS=0, sdS=0;
+    for(let i=0;i<N;i++){ if(!sel.mask[i]) continue;
+      const c=cluster[i]; cl[c]=(cl[c]||0)+1;
+      const s=CEN[censat[i]]; if(s!=="non_sat") cs[s]=(cs[s]||0)+1;
+      const cc=P.meta.chroms[chrom[i]]; ch[cc]=(ch[cc]||0)+1;
+      gcS+=25+A.gc[i]/255*40; pvS+=A.private[i]/2.55; sdS+=A.sd[i]/2.55;
+    }
+    const n=sel.n;
+    const topCl=Object.entries(cl).sort((a,b)=>b[1]-a[1]).slice(0,3)
+      .map(([c,k])=>{ const id=+c;
+        const nm=id<0? "noise" : (clTable[id]?.name||("cluster "+id));
+        return `<span><span class="sw" style="background:${id<0?css("--noise"):clColor[id]};display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></span><b>${nm}</b> (${k})</span>`; }).join("");
+    const topCs=Object.entries(cs).sort((a,b)=>b[1]-a[1]).slice(0,3)
+      .map(([s,k])=>`<b>${s}</b> (${k})`).join(" · ");
+    const chE=Object.entries(ch).sort((a,b)=>b[1]-a[1]);
+    el.style.display="block";
+    el.innerHTML = `<div class="name">region · ${n.toLocaleString()} bins · ~${(n*P.meta.bin_bp/1e6).toFixed(1)} Mb</div>
+      <div class="facts">
+        ${topCl}
+        <span>satellite: ${topCs||"—"}</span>
+        <span>spread <b>${chE.length}</b> chromosome${chE.length>1?"s":""} — top <b>${chE[0][0]}</b> (${Math.round(chE[0][1]/n*100)}%)</span>
+        <span>GC <b>${(gcS/n).toFixed(1)}%</b></span>
+        <span>segdup <b>${Math.round(sdS/n)}%</b></span>
+        <span>private vocab <b>${Math.round(pvS/n)}%</b></span>
+      </div>`;
+    return;
+  }
+  if (!sel || sel.type!=="cluster" || !clTable[sel.id]){ el.style.display="none"; return; }
+  const r=clTable[sel.id];
+  el.style.display="block";
+  el.innerHTML = `<div class="name"><span class="sw" style="background:${clColor[r.cluster]}"></span>
+      cluster ${r.cluster} · ${r.name}</div>
+    <div class="facts">
+      <span><b>${r.n_bins.toLocaleString()}</b> bins</span>
+      <span><b>${r.mb.toLocaleString()}</b> Mb</span>
+      <span>dominant class <b>${r.dom_class}</b> (${Math.round(r.dom_class_frac*100)}%)</span>
+      <span>spread <b>${r.n_chroms}</b> chromosome${r.n_chroms>1?"s":""}${r.dom_chrom_frac>=0.8?" — mostly <b>"+r.dom_chrom+"</b>":""}</span>
+      <span>GC <b>${Math.round(r.gc*100)}%</b></span>
+      <span>segdup <b>${Math.round(r.sd_frac*100)}%</b></span>
+      <span>private vocab <b>${Math.round(r.private_frac*100)}%</b></span>
+    </div>`;
+}
+
+/* ---------- legend + modes ---------- */
+const modesEl=document.getElementById("modes");
+for (const m of MODES){
+  const b=document.createElement("button");
+  b.textContent=m.label; b.dataset.m=m.id;
+  b.setAttribute("aria-pressed", m.id===mode);
+  b.onclick=()=>{ mode=m.id;
+    for(const x of modesEl.children) x.setAttribute("aria-pressed", x.dataset.m===mode);
+    if (sel && sel.type!=="bins" && ((mode==="censat")!==(sel.type==="censat"))) sel=null;
+    document.getElementById("clearsel").hidden=!sel;
+    invalidate();
+    drawMap(); drawRibbon(); buildLegend(); };
+  modesEl.appendChild(b);
+}
+function chip(color,label,on,click){
+  const b=document.createElement("button"); b.className="lchip"+(on?" on":"");
+  b.innerHTML=`<span class="sw" style="background:${color}"></span>${label}`;
+  b.onclick=click; return b;
+}
+function buildLegend(){
+  const el=document.getElementById("legend"); el.innerHTML="";
+  if (mode==="cluster"){
+    const bySize=[...P.clusters.table].sort((a,b)=>b.n_bins-a.n_bins);
+    const sat=bySize.filter(r=>r.dom_class!=="non_sat").slice(0,9);
+    const eu=bySize.filter(r=>r.dom_class==="non_sat").slice(0,7);
+    const rows=[...eu,...sat];
+    for (const r of rows) el.appendChild(chip(clColor[r.cluster], r.cluster+" · "+r.name,
+      sel&&sel.type==="cluster"&&sel.id===r.cluster,
+      ()=>toggleSel({type:"cluster",id:r.cluster})));
+    el.appendChild(chip(css("--noise"),"noise",false,()=>{}));
+  } else if (mode==="censat"){
+    for (const c of CEN){ if(c==="non_sat") continue;
+      if (!(c in cenColor)) continue;
+      el.appendChild(chip(cenColor[c], c, sel&&sel.type==="censat"&&sel.id===c,
+        ()=>toggleSel({type:"censat",id:c}))); }
+    el.appendChild(chip(css("--noise"),"non-satellite",false,()=>{}));
+  } else if (mode==="chrom"){
+    P.meta.chroms.forEach((c,i)=> el.appendChild(chip(chromColor[i],c.replace("chr",""),false,()=>{})));
+  } else {
+    const lab={gc:["GC 25%","65%"],private:["0% private","100%"],
+      sd:["0% segdup","100%"],pos:["pter","qter"]}[mode];
+    const g=document.createElement("div"); g.className="gradbar";
+    const cv=document.createElement("canvas"); cv.width=140; cv.height=10;
+    const ctx=cv.getContext("2d");
+    for(let x=0;x<140;x++){ ctx.fillStyle=ramp(x/139); ctx.fillRect(x,0,1,10); }
+    g.append(lab[0], cv, lab[1]); el.appendChild(g);
+  }
+}
+function syncLegend(){ buildLegend(); }
+
+/* ---------- metrics strip ---------- */
+const M=P.metrics;
+function metric(v,s){ return `<div class="metric"><div class="v">${v}</div><div class="s">${s}</div></div>`; }
+document.getElementById("metrics").innerHTML =
+  metric(N.toLocaleString(), "bins of 100 kb — the whole assembly, chr1–Y") +
+  metric(M.n_clusters, `vocabulary clusters (noise ${(M.noise_frac*100).toFixed(1)}%)`) +
+  (M.sat_cluster_weighted_purity!=null? metric((M.sat_cluster_weighted_purity*100).toFixed(0)+"%",
+    "satellite-cluster purity vs censat, size-weighted"):"") +
+  (M.alpha_chrom_knn_acc!=null? metric((M.alpha_chrom_knn_acc*100).toFixed(0)+"%",
+    `αSat HOR bin → chromosome, kNN CV (chance ${(M.alpha_chrom_chance*100).toFixed(0)}%)`):"") +
+  (M.rdna_chrom_knn_acc!=null? metric((M.rdna_chrom_knn_acc*100).toFixed(0)+"%",
+    `rDNA bin → chromosome — the predicted weak side (chance ${(M.rdna_chrom_chance*100).toFixed(0)}%)`):"") +
+  (M.trackA_vs_trackB_spearman!=null? metric("ρ "+M.trackA_vs_trackB_spearman.toFixed(2),
+    "model distance vs exact Jaccard, 1 Mb pairs"):"");
+
+/* ---------- params ---------- */
+document.getElementById("params").innerHTML = [
+  ["genome","CHM13v2.0"],["k", P.meta.k],["base scaled", P.meta.base_scaled],
+  ["model scaled", P.meta.scaled],["bin", (P.meta.bin_bp/1000)+" kb"],
+  ["pairwise bin", P.heatmap.bin_mb+" Mb"],["svd dims","128"],
+  ["umap","n=30 · cosine"],["hdbscan","mcs 25 · ms 10"],
+  ["bins", N.toLocaleString()],["1 Mb bins", P.heatmap.n.toLocaleString()],
+  ["engine","numba · sourmash-compatible"],
+].map(([a,b])=>`<div><span>${a}</span><span>${b}</span></div>`).join("");
+document.getElementById("eb-k").textContent = "k = "+P.meta.k;
+
+/* ---------- cluster table ---------- */
+const tbl=document.getElementById("ctable");
+let sortKey="n_bins", sortDir=-1;
+const COLS=[["cluster","#"],["name","name"],["n_bins","bins"],["mb","Mb"],
+  ["dom_class","dominant class"],["dom_class_frac","purity"],
+  ["n_chroms","chroms"],["gc","GC"],["sd_frac","segdup"],["private_frac","private"]];
+function drawTable(){
+  const rows=[...P.clusters.table].sort((a,b)=>{
+    const va=a[sortKey],vb=b[sortKey];
+    return (typeof va==="string"? va.localeCompare(vb) : va-vb)*sortDir; });
+  tbl.innerHTML = "<thead><tr>"+COLS.map(([k,l])=>
+    `<th data-k="${k}">${l}${k===sortKey?(sortDir<0?" ↓":" ↑"):""}</th>`).join("")+"</tr></thead>"+
+    "<tbody>"+rows.map(r=>`<tr data-c="${r.cluster}" class="${sel&&sel.type==='cluster'&&sel.id===r.cluster?'sel':''}">
+      <td><span class="sw" style="background:${clColor[r.cluster]}"></span>${r.cluster}</td>
+      <td style="color:var(--ink)">${r.name}</td>
+      <td>${r.n_bins.toLocaleString()}</td><td>${r.mb.toLocaleString()}</td>
+      <td>${r.dom_class}</td><td>${Math.round(r.dom_class_frac*100)}%</td>
+      <td>${r.n_chroms}</td><td>${Math.round(r.gc*100)}%</td>
+      <td>${Math.round(r.sd_frac*100)}%</td><td>${Math.round(r.private_frac*100)}%</td>
+    </tr>`).join("")+"</tbody>";
+  tbl.querySelectorAll("th").forEach(th=> th.onclick=()=>{
+    const k=th.dataset.k;
+    if (k===sortKey) sortDir*=-1; else { sortKey=k; sortDir=-1; }
+    drawTable(); });
+  tbl.querySelectorAll("tbody tr").forEach(tr=> tr.onclick=()=>
+    toggleSel({type:"cluster", id:+tr.dataset.c}));
+}
+function syncTable(){ drawTable(); }
+document.getElementById("cluster-lede").textContent =
+  `${P.clusters.table.length} clusters, named by their dominant annotation after the fact. ` +
+  `Sort by any column; click a row to light the cluster up in the map and the territory.`;
+
+/* ---------- heatmap ---------- */
+const heat=document.getElementById("heat"), hctx=heat.getContext("2d");
+let HM=null, hOrder="genome", hn=P.heatmap.n;
+const hChrom=bytes(P.heatmap.chrom),
+      hStart=new Uint16Array(bytes(P.heatmap.start_mb).buffer),
+      hLeaf=new Int16Array(bytes(P.heatmap.leaf_order).buffer),
+      hClust=new Int16Array(bytes(P.heatmap.cluster).buffer);
+const hImg=new Image();
+hImg.onload=()=>{
+  const oc=document.createElement("canvas"); oc.width=hn; oc.height=hn;
+  const octx=oc.getContext("2d",{willReadFrequently:true});
+  octx.drawImage(hImg,0,0);
+  const d=octx.getImageData(0,0,hn,hn).data;
+  HM=new Uint8Array(hn*hn);
+  for(let i=0;i<hn*hn;i++) HM[i]=d[i*4];
+  drawHeat();
+};
+hImg.src="data:image/png;base64,"+P.heatmap.png;
+function orderIdx(){ if (hOrder==="genome"){ const a=new Int32Array(hn); for(let i=0;i<hn;i++)a[i]=i; return a; }
+  return Int32Array.from(hLeaf); }
+let hDisp=1, hOrd=null;
+function drawHeat(){
+  if(!HM) return;
+  const r=heat.getBoundingClientRect();
+  const side=Math.min(Math.round(r.width), 760);
+  heat.width=side*dpr; heat.height=side*dpr; heat.style.height=side+"px";
+  hDisp=side; hOrd=orderIdx();
+  const img=hctx.createImageData(side,side);
+  const dk=isDark();
+  const [lr,lg,lb]=hexRgb(dk? "#101417":"#f4f2ec"), [hr,hg,hb]=hexRgb(dk? "#9ecfff":"#123c78");
+  const scale=hn/side;
+  for(let yy=0;yy<side;yy++){
+    const y0=Math.floor(yy*scale), y1=Math.max(y0+1,Math.floor((yy+1)*scale));
+    for(let xx=0;xx<side;xx++){
+      const x0=Math.floor(xx*scale), x1=Math.max(x0+1,Math.floor((xx+1)*scale));
+      let v=0;
+      for(let y=y0;y<y1;y++){ const ry=hOrd[y]*hn;
+        for(let x=x0;x<x1;x++){ const q=HM[ry+hOrd[x]]; if(q>v)v=q; } }
+      const t=v/255, o=(yy*side+xx)*4;
+      img.data[o]  =Math.round(lerp(lr,hr,t));
+      img.data[o+1]=Math.round(lerp(lg,hg,t));
+      img.data[o+2]=Math.round(lerp(lb,hb,t));
+      img.data[o+3]=255;
+    }
+  }
+  const oc=document.createElement("canvas"); oc.width=side; oc.height=side;
+  oc.getContext("2d").putImageData(img,0,0);
+  hctx.setTransform(dpr,0,0,dpr,0,0);
+  hctx.clearRect(0,0,side,side);
+  hctx.drawImage(oc,0,0);
+  if (hOrder==="genome"){
+    hctx.strokeStyle=css("--paper"); hctx.lineWidth=0.75; hctx.globalAlpha=0.9;
+    for(let i=1;i<hn;i++){ if(hChrom[i]!==hChrom[i-1]){ const p=i/hn*side;
+      hctx.beginPath(); hctx.moveTo(p,0); hctx.lineTo(p,side); hctx.stroke();
+      hctx.beginPath(); hctx.moveTo(0,p); hctx.lineTo(side,p); hctx.stroke(); } }
+    hctx.globalAlpha=1;
+  }
+}
+document.querySelectorAll("#heatorder button").forEach(b=> b.onclick=()=>{
+  hOrder=b.dataset.o;
+  document.querySelectorAll("#heatorder button").forEach(x=>
+    x.setAttribute("aria-pressed", x.dataset.o===hOrder));
+  drawHeat();
+});
+heat.addEventListener("pointermove", e=>{
+  if(!HM||!hOrd) return;
+  const r=heat.getBoundingClientRect();
+  const xx=Math.floor((e.clientX-r.left)/hDisp*hn), yy=Math.floor((e.clientY-r.top)/hDisp*hn);
+  if(xx<0||yy<0||xx>=hn||yy>=hn) return;
+  const a=hOrd[yy], b=hOrd[xx];
+  const t=HM[a*hn+b]/255, v=t*t*t;  // undo the cbrt display stretch
+  const f=i=>`${P.meta.chroms[hChrom[i]]}:${hStart[i]}–${hStart[i]+P.heatmap.bin_mb} Mb`;
+  document.getElementById("heatreadout").innerHTML =
+    `<b>${f(a)}</b> × <b>${f(b)}</b><br>exact Jaccard ≈ <b>${v<0.01? v.toPrecision(2): v.toFixed(3)}</b>` +
+    (hClust[a]>=0&&hClust[a]===hClust[b]? " · same pairwise cluster":"");
+});
+heat.addEventListener("pointerleave", ()=>{
+  document.getElementById("heatreadout").innerHTML="hover the matrix…"; });
+
+/* ---------- robustness figures ---------- */
+const FIGCAP = {
+  confusions: "<b>The two-way test.</b> Left: alpha-HOR bins assigned to their chromosome by vocabulary kNN — the diagonal is the result, and the largest off-diagonal smudges are chr1↔5↔19: the S1C1/5/19 HOR family those chromosomes genuinely share. Middle: the same test on rDNA bins drops sharply toward chance, with cross-acrocentric bleed — recombining arrays should be hard to tell apart. Right: satellite family recovery.",
+  sweep: "<b>Parameter sweep.</b> Cluster agreement (ARI) across a 4×3 grid of HDBSCAN settings spanning a 10× range of granularity"+
+    (M.hdbscan_sweep_adjacent_ari? ` — ${M.hdbscan_sweep_adjacent_ari.toFixed(2)} between comparable settings; the low corners are granularity changing, not structure vanishing.`:"."),
+  ab_agreement: "<b>Model vs exact.</b> Every sampled 1 Mb pair: cosine distance in the SVD model against exact 1−Jaccard from the sketches. The model earns its shortcuts.",
+  seeds: "<b>Seeds.</b> The same data under four UMAP seeds. Shapes move — micro-neighborhoods are not the stable object — but the semantics hold"+
+    (M.umap_seed_semantic_acc? `: satellite families stay separable in place at ${Math.round(Math.min(...M.umap_seed_semantic_acc)*100)}% kNN accuracy in every seed.`:"."),
+};
+document.getElementById("figs").innerHTML = Object.entries(P.figs).map(([k,v])=>
+  `<div class="fig"><img src="data:image/png;base64,${v}" alt="${k}">
+   <div class="cap">${FIGCAP[k]||k}</div></div>`).join("");
+
+/* ---------- layout + theme ---------- */
+function layout(){
+  dpr=Math.min(devicePixelRatio||1,2);
+  invalidate();
+  const mr=map.getBoundingClientRect();
+  [mw,mh]=sizeCanvas(map, Math.max(360, Math.min(520, mr.width)));
+  [rw,rh]=sizeCanvas(rib, RTOP+ROWH*P.meta.chroms.length+6);
+  drawMap(); drawRibbon(); drawHeat();
+}
+/* ---------- map zoom / pan / box-select ---------- */
+let drag=null, boxMode=false, pinch=null;
+const activePtrs=new Map();
+function mapXY(e){ const r=map.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; }
+function applyBox(){
+  const lox=Math.min(drag.x0,drag.x1), hix=Math.max(drag.x0,drag.x1);
+  const loy=Math.min(drag.y0,drag.y1), hiy=Math.max(drag.y0,drag.y1);
+  const mask=new Uint8Array(N); let n=0;
+  for(let i=0;i<N;i++){ const sx=px(i), sy=py(i);
+    if(sx>=lox&&sx<=hix&&sy>=loy&&sy<=hiy){ mask[i]=1; n++; } }
+  if(n) toggleSel({type:"bins", mask, n});
+}
+function tapSelect(i){
+  if(i<0){ return; }
+  if (mode==="censat"){ const cls=CEN[censat[i]];
+    toggleSel(cls==="non_sat"? null : {type:"censat", id:cls}); }
+  else { const c=cluster[i]; toggleSel(c<0? null : {type:"cluster", id:c}); }
+}
+function bindMapInteractions(){
+  map.addEventListener("pointerdown", e=>{
+    map.setPointerCapture(e.pointerId);
+    activePtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (activePtrs.size===2){
+      const [a,b]=[...activePtrs.values()];
+      pinch={d0:Math.hypot(a.x-b.x,a.y-b.y)||1, vs0:vs};
+      drag=null;
+    } else if (activePtrs.size===1){
+      const [x,y]=mapXY(e);
+      drag={type:(boxMode||e.shiftKey)?"box":"pan", x0:x, y0:y, x1:x, y1:y,
+            lx:x, ly:y, moved:false};
+    }
+    e.preventDefault();
+  });
+  map.addEventListener("pointermove", e=>{
+    if (activePtrs.has(e.pointerId))
+      activePtrs.set(e.pointerId, {x:e.clientX, y:e.clientY});
+    if (pinch && activePtrs.size===2){
+      const [a,b]=[...activePtrs.values()];
+      const d=Math.hypot(a.x-b.x,a.y-b.y)||1;
+      const r=map.getBoundingClientRect();
+      const mx=(a.x+b.x)/2-r.left, my=(a.y+b.y)/2-r.top;
+      zoomAt(mx,my,(pinch.vs0*d/pinch.d0)/vs);
+      return;
+    }
+    if (drag){
+      const [x,y]=mapXY(e);
+      drag.x1=x; drag.y1=y;
+      if (Math.hypot(x-drag.x0,y-drag.y0)>4) drag.moved=true;
+      if (drag.type==="pan"){
+        if (vs>1){ vtx+=x-drag.lx; vty+=y-drag.ly; clampView(); mapBase=null; }
+        drag.lx=x; drag.ly=y;
+      }
+      drawMap();
+      return;
+    }
+    const [x,y]=mapXY(e);
+    setHover(nearest(x,y), e);
+  });
+  const finish = e=>{
+    activePtrs.delete(e.pointerId);
+    if (activePtrs.size<2) pinch=null;
+    if (drag){
+      const wasBox = drag.type==="box" && drag.moved;
+      const wasTap = !drag.moved;
+      const d=drag;
+      if (wasBox){ applyBox(); }
+      drag=null;
+      if (wasTap) tapSelect(nearest(d.x0,d.y0));
+      drawMap();
+    }
+  };
+  map.addEventListener("pointerup", finish);
+  map.addEventListener("pointercancel", finish);
+  map.addEventListener("pointerleave", ()=>{ if(!drag&&!pinch) setHover(-1); });
+  map.addEventListener("wheel", e=>{
+    if (!e.ctrlKey && vs===1) return;   // plain wheel scrolls the page until zoomed
+    e.preventDefault();
+    const [x,y]=mapXY(e);
+    if (e.ctrlKey) zoomAt(x,y, Math.exp(-e.deltaY*0.01));
+    else { vtx-=e.deltaX; vty-=e.deltaY; clampView(); mapBase=null; drawMap(); }
+  }, {passive:false});
+  map.addEventListener("dblclick", e=>{
+    e.preventDefault();
+    const [x,y]=mapXY(e);
+    zoomAt(x,y,2);
+  });
+  // Safari trackpad pinch arrives as gesture events, not ctrl+wheel
+  let gestureVs0=1;
+  map.addEventListener("gesturestart", e=>{ e.preventDefault(); gestureVs0=vs; });
+  map.addEventListener("gesturechange", e=>{
+    e.preventDefault();
+    const r=map.getBoundingClientRect();
+    zoomAt(e.clientX-r.left, e.clientY-r.top, (gestureVs0*e.scale)/vs);
+  });
+  document.getElementById("mt-in").onclick = ()=> zoomAt(mw/2, mh/2, 1.6);
+  document.getElementById("mt-out").onclick = ()=> zoomAt(mw/2, mh/2, 1/1.6);
+  document.getElementById("mt-reset").onclick = ()=>{
+    vs=1; vtx=0; vty=0; mapBase=null; drawMap(); };
+  const bx=document.getElementById("mt-box");
+  bx.onclick = ()=>{ boxMode=!boxMode; bx.setAttribute("aria-pressed", boxMode); };
+}
+
+buildGrid(); buildLegend(); drawTable();
+bindMapInteractions(); bindHover(rib, ribbonHit);
+addEventListener("resize", ()=>{ clearTimeout(layout._t); layout._t=setTimeout(layout,120); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", layout);
+new MutationObserver(layout).observe(document.documentElement,
+  {attributes:true, attributeFilter:["data-theme"]});
+layout();
+</script>

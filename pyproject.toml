@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kmer-clust"
+version = "0.1.0"
+description = "A map of T2T-CHM13 where position is decided purely by k-mer vocabulary: FracMinHash sketches -> randomized SVD -> UMAP -> HDBSCAN, plus exact pairwise sketch distances."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.14",
+    "scikit-learn>=1.5",
+    "umap-learn>=0.5.7",
+    "numba>=0.60",
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "matplotlib>=3.9",
+    "pillow>=10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "sourmash>=4.8", "mmh3>=4"]
+
+[project.scripts]
+kmer-clust = "kmer_clust.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["kmer_clust*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

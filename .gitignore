@@ -1,0 +1,10 @@
+# data and derived outputs stay local; docs/ (the built site) is tracked
+data/
+out/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
