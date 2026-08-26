@@ -96,6 +96,44 @@ def build_payload(params: Params) -> dict:
         payload["arrays"][c] = b64(u8(annot[c]))
         payload["meta"].setdefault("rm_cols", []).append(c)
 
+    periods_path = OUT / f"periods_{params.bin_bp}.parquet"
+    if periods_path.exists():
+        per = pd.read_parquet(periods_path)
+        payload["arrays"]["period"] = b64(
+            np.clip(per["period_bp"].to_numpy(), 0, 65500).astype(np.uint16)
+        )
+        payload["arrays"]["pstrength"] = b64(u8(per["strength"]))
+
+    # alternative embedding views from the structure lab (satellite-health gated)
+    lab_json, lab_npz = OUT / "structure_lab.json", OUT / "structure_lab.npz"
+    if lab_json.exists() and lab_npz.exists():
+        lab = json.loads(lab_json.read_text())
+        by_tag = {r["tag"]: r for r in lab["results"]}
+        base = by_tag.get("a000")
+        store = np.load(lab_npz)
+        a_tag = f"a{int(lab['a_best'] * 100):03d}"
+        labels = {a_tag: f"equal voice (α={lab['a_best']})",
+                  "concat": "dual vocab k21⊕k17", "k17": "k=17 only"}
+        views = []
+        for tag in dict.fromkeys(["concat", "k17", a_tag]):
+            r = by_tag.get(tag)
+            if tag == "a000" or r is None or f"{tag}_xy" not in store:
+                continue
+            if base and (
+                r["sat_sem_2d"] < base["sat_sem_2d"] - 0.02
+                or r["alpha_chrom"] < base["alpha_chrom"] - 0.02
+            ):
+                continue
+            xy = store[f"{tag}_xy"]
+            qx2, _, _ = quant16(xy[:, 0])
+            qy2, _, _ = quant16(xy[:, 1])
+            views.append({"id": tag, "label": labels.get(tag, tag),
+                          "qx": b64(qx2), "qy": b64(qy2)})
+            if len(views) == 2:
+                break
+        if views:
+            payload["views"] = views
+
     # ---- 1 Mb pairwise heatmap as grayscale PNG ----------------------------
     from PIL import Image
 

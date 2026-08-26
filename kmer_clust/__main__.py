@@ -5,7 +5,8 @@ import time
 
 from .config import PARAMS
 
-STAGES = ["sketch", "matrix", "embed", "pairwise", "annotate", "analyze", "figures", "site"]
+STAGES = ["sketch", "matrix", "embed", "pairwise", "annotate", "analyze",
+          "periods", "figures", "site"]
 
 
 def main() -> None:
@@ -51,6 +52,10 @@ def main() -> None:
             from . import analyze
 
             analyze.run(p)
+        elif stage == "periods":
+            from . import periodicity
+
+            periodicity.run(p)
         elif stage == "figures":
             from . import figures
 

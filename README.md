@@ -116,12 +116,33 @@ on the atlas page):
 | satellite semantic accuracy at half / quarter sketch depth | 96.3% / 96.4% |
 | HDBSCAN agreement at comparable granularity (full 10× grid) | ARI 0.61 (0.34) |
 | model vs exact distance, 1 Mb pairs (Spearman) | ρ 0.54 |
+| live-HOR bins: tandem period from hash spacing alone | **1,364 bp = 7.99 × the 171 bp monomer** (83% periodic) |
+| rDNA bins: tandem period from hash spacing alone | **44.8 kb** (the ~45 kb unit) |
+| mainland dialect R² (Alu/L1/SD/GC): k=21 → k=17 vocabulary | 0.465 → **0.530** (satellites intact) |
+| dual vocabulary k21⊕k17: dialect R² / HDBSCAN noise | 0.501 / **2.2%** (vs 33.3% baseline) |
 
 The raw k=15 neighbor-overlap numbers under reseeding/subsampling are low
 (0.11–0.24) — and that is the honest reading of a dense euchromatic mass whose
 neighbors are legitimately interchangeable; the semantic quantities above are
 the stable object. Runtime on the M1 Max: sketch 157 s, matrix+SVD 33 s,
 UMAP+HDBSCAN 76 s, exact pairwise 117 s, full analysis 282 s.
+
+## Finding more structure (annotation-free levers)
+
+Two additions keep the build annotation-agnostic while articulating the map:
+
+- **Tandem periodicity** (`periodicity.py`, `make periods`): within one bin, the
+  same kept hash recurring every P bases is the signature of a tandem array
+  with unit ~P. The dominant gap per bin becomes a color mode and a tooltip
+  stat. Judged after the fact: live alpha-HOR bins land at 7.99× the 171 bp
+  monomer and rDNA at its 45 kb unit — from spacing statistics alone.
+- **The structure lab** (`structure_lab.py`): a whitening sweep over SVD
+  component scaling plus a second k=17 vocabulary (shorter words let diverged
+  repeat copies share again). Verdict: whitening at α≈0.35 collapses HDBSCAN
+  noise (33%→2%) without adding information; **k=17 adds real euchromatic
+  signal** (+14% dialect R², satellites improve); the k21⊕k17 concatenation
+  gets both. The atlas ships the winners as morphable embedding views —
+  satellite-health-gated, baseline always default.
 
 ## Repo layout
 
