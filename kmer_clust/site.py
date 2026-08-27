@@ -126,7 +126,8 @@ def build_payload(params: Params) -> dict:
     if kl_json.exists() and kl_npz.exists():
         kl = json.loads(kl_json.read_text())
         store = np.load(kl_npz)
-        names = [f"k{k}" for k in kl["ks"]] + (["concat"] if "concat" in store else [])
+        names = [f"k{k}" for k in kl["ks"]]
+        names += [n for n in ("concat", "duo1521") if n in store]
         allxy = np.stack([store[n] for n in names])
         lo = allxy.reshape(-1, 2).min(axis=0)
         hi = allxy.reshape(-1, 2).max(axis=0)
@@ -136,22 +137,40 @@ def build_payload(params: Params) -> dict:
                 (v - lo[ax]) / max(hi[ax] - lo[ax], 1e-9) * 65535
             ).astype(np.uint16)
 
-        concat_metrics = None
+        concat_metrics = duo_metrics = None
         if lab_json.exists():
             lab = json.loads(lab_json.read_text())
             concat_metrics = next(
                 (r for r in lab["results"] if r["tag"] == "concat"), None
             )
+        mk_json = OUT / "multik_lab.json"
+        if mk_json.exists():
+            mk = json.loads(mk_json.read_text())
+            duo_metrics = next((r for r in mk if r["tag"] == "k15+k21"), None)
+
+        TIPS = {
+            "concat": "consensus vocabulary k17⊕k21 — cosine is the mean of two "
+                      "adjacent horizons; their agreement sharpens clusters (~2% noise)",
+            "duo1521": "information vocabulary k15⊕k21 — composition + identity, the "
+                       "best-organized mainland; the horizons' disagreement lowers "
+                       "flat-cluster confidence",
+            "k15": "single vocabulary, k=15 — at the composition end: 4^15 is about "
+                   "the genome's own size, so sharing drifts from identity to style",
+        }
         views = []
         for n in names:
             xy = store[n]
             if n == "concat":
-                label, met = "dual vocab k21⊕k17", concat_metrics
+                label, met = "consensus k17⊕k21", concat_metrics
+            elif n == "duo1521":
+                label, met = "info k15⊕k21", duo_metrics
             else:
                 k = int(n[1:])
                 label, met = f"k={k}", kl["metrics"].get(str(k))
             views.append({
                 "id": n, "label": label,
+                "tip": TIPS.get(n, f"single vocabulary, k={n[1:]} — a full re-sketch "
+                                   "of the genome at this word length"),
                 "qx": b64(qshared(xy[:, 0], 0)), "qy": b64(qshared(xy[:, 1], 1)),
                 "metrics": {
                     key: met[key]

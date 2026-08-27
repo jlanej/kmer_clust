@@ -167,6 +167,14 @@ Two additions keep the build annotation-agnostic while articulating the map:
   morphs the map through vocabularies (with per-k judge metrics displayed
   live). k=15 is included deliberately — 4¹⁵ is about the genome's own size,
   so the slider lets you watch the random-collision floor arrive.
+- **Multi-k vocabularies** (`multik_lab.py`): paired views concatenate two
+  per-k models, each block L2-normalized so the pair's cosine is exactly the
+  mean of the two vocabularies' cosines. Measured verdict: adjacent horizons
+  agree and sharpen clusters (**consensus k17⊕k21**: dialect R² 0.51, 2.4%
+  HDBSCAN noise); complementary horizons maximize information at the cost of
+  flat-cluster confidence (**info k15⊕k21**: R² 0.59, best-organized
+  euchromatin); concatenating all six k's is dominated by both — redundant
+  middle horizons average the ends away. Both winners ship as atlas views.
 
 ## Repo layout
 

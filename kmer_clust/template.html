@@ -186,9 +186,9 @@ that word length, layouts Procrustes-aligned so the morph shows structure, not s
         <input type="range" id="kn-k" min="0" max="5" step="1" value="3">
         <b id="kval"></b></label>
       <div class="seg" id="viewseg" role="group" aria-label="embedding view"></div>
-      <label>size <input type="range" id="kn-size" min="0.5" max="3" step="0.05" value="1"></label>
-      <label>opacity <input type="range" id="kn-alpha" min="0.25" max="1" step="0.05" value="1"></label>
-      <span id="kread"></span>
+      <label title="dot size">size <input type="range" id="kn-size" min="0.5" max="3" step="0.05" value="1"></label>
+      <label title="dot opacity">opacity <input type="range" id="kn-alpha" min="0.25" max="1" step="0.05" value="1"></label>
+      <span id="kread" title="judge-side scores for the current view: how well the embedding organizes euchromatin by repeat dialect (R²), satellite-family separability, and αSat→chromosome accuracy"></span>
     </div>
   </div>
   <div class="pane">
@@ -211,8 +211,8 @@ the diagonal blocks are chromosomes; flip to dendrogram order and the satellite 
 from across the genome. Hover for the pair behind any pixel.</p>
 <div class="controls">
   <div class="seg" id="heatorder" role="group" aria-label="heatmap order">
-    <button aria-pressed="true" data-o="genome">genome order</button>
-    <button aria-pressed="false" data-o="leaf">dendrogram order</button>
+    <button aria-pressed="true" data-o="genome" title="bins in genome coordinate order — diagonal blocks are chromosomes">genome order</button>
+    <button aria-pressed="false" data-o="leaf" title="average-linkage dendrogram order (containment-ANI distance) — satellite families reassemble from across the genome">dendrogram order</button>
   </div>
 </div>
 <div class="heatwrap">
@@ -253,6 +253,22 @@ would fail the first.</p>
     <p><b>Distance (track B).</b> Bins boosted to 1 Mb so sketches are deep enough that pairwise
     Jaccard and containment are essentially exact, then one sparse matmul gives all
     ~4.9 M pairs. The two tracks agree or the model is wrong — that agreement is measured, not assumed.</p>
+    <p><b>Views.</b> The <b>k</b> slider re-sketches the genome at each word length 15–25.
+    Long words mean identity — a shared 21-mer (4<sup>21</sup> ≈ 1,400× the genome) is evidence of
+    common descent — while short words drift toward composition (4<sup>15</sup> is about the
+    genome's own size). Every layout is Procrustes-aligned to k=21, so morphing shows structure,
+    not spin. The paired views concatenate two per-k models, each L2-normalized so the pair's
+    cosine is exactly the <em>mean</em> of the two vocabularies' cosines. That mean has two
+    regimes: adjacent horizons mostly agree, and their consensus sharpens clusters
+    (<b>consensus k17⊕k21</b>: ~2% HDBSCAN noise); complementary horizons disagree productively,
+    maximizing information at the cost of flat-cluster confidence (<b>info k15⊕k21</b>: the
+    best-organized euchromatin). Concatenating all six k's does worse than either — redundant
+    middle horizons average the ends away. Cluster colors always come from the k=21 model.</p>
+    <p><b>Diagnostics.</b> Tandem periodicity is the dominant spacing between repeats of the same
+    kept hash within a bin — live αSat comes out at 7.99× the 171 bp monomer and rDNA at ~45 kb,
+    with no annotation input. Acrocentric mixing is the fraction of a p-arm bin's nearest
+    vocabulary neighbors (own-array adjacency excluded) that come from a <em>different</em>
+    acrocentric: the pan-acrocentric commons made visible bin by bin.</p>
     <p><b>Judged by</b> the T2T censat v2.1, segdup, and RepeatMasker tracks, which color and score
     the finished map but contribute nothing to it.</p>
   </div>
@@ -311,16 +327,18 @@ const ramp = t => { const [lo,hi] = isDark()? RAMP_D : RAMP; return rampColor(t,
 
 /* ---------- color modes ---------- */
 const MODES = [
-  {id:"cluster",  label:"cluster"},
-  {id:"censat",   label:"satellite class"},
-  {id:"chrom",    label:"chromosome"},
-  {id:"gc",       label:"GC"},
-  {id:"private",  label:"private vocabulary"},
-  {id:"sd",       label:"segdup"},
-  {id:"pos",      label:"position"},
+  {id:"cluster",  label:"cluster", tip:"HDBSCAN clusters from the k=21 model (grey = noise). Cluster identity stays fixed across all embedding views."},
+  {id:"censat",   label:"satellite class", tip:"T2T censat v2.1 satellite families — annotation colors the map, it never builds it"},
+  {id:"chrom",    label:"chromosome", tip:"chromosome identity — outside satellites the map should NOT sort by this"},
+  {id:"gc",       label:"GC", tip:"GC content per bin (a one-dimensional shadow of composition)"},
+  {id:"private",  label:"private vocabulary", tip:"fraction of the bin's words found in no other bin — dropped from the model, kept as a diagnostic"},
+  {id:"sd",       label:"segdup", tip:"segmental-duplication coverage (judge-side annotation)"},
+  {id:"pos",      label:"position", tip:"position along each chromosome, pter→qter — a positional gradient the model never sees"},
 ];
-if (A.period) MODES.push({id:"period", label:"tandem period"});
-if (A.acro) MODES.push({id:"acro", label:"acro p-arms"});
+if (A.period) MODES.push({id:"period", label:"tandem period",
+  tip:"tandem repeat unit length, from the spacing of repeated sketch hashes within the bin — annotation-free (grey = aperiodic)"});
+if (A.acro) MODES.push({id:"acro", label:"acro p-arms",
+  tip:"the five acrocentric p-arms colored by chromosome, desaturated by cross-acrocentric vocabulary mixing"});
 const ACRO_COLORS = ["#2a78d6","#eb6834","#1baf7a","#e87ba4","#4a3aa7"];
 function mixToward(hex, greyHex, t){
   const a=hexRgb(hex), g=hexRgb(greyHex);
@@ -366,7 +384,7 @@ let vs=1, vtx=0, vty=0;   // map view: scale + translation, CSS px
 /* embedding views: alternative precomputed layouts, morphable client-side */
 const VIEWS = [{id:"main", label:"baseline", qx, qy}];
 if (P.views) for (const v of P.views) VIEWS.push({
-  id:v.id, label:v.label, metrics:v.metrics,
+  id:v.id, label:v.label, metrics:v.metrics, tip:v.tip,
   qx:new Uint16Array(bytes(v.qx).buffer), qy:new Uint16Array(bytes(v.qy).buffer),
 });
 const viewById={}; VIEWS.forEach((v,i)=>viewById[v.id]=i);
@@ -652,6 +670,7 @@ const modesEl=document.getElementById("modes");
 for (const m of MODES){
   const b=document.createElement("button");
   b.textContent=m.label; b.dataset.m=m.id;
+  if (m.tip) b.title=m.tip;
   b.setAttribute("aria-pressed", m.id===mode);
   b.onclick=()=>{ mode=m.id;
     for(const x of modesEl.children) x.setAttribute("aria-pressed", x.dataset.m===mode);
@@ -981,6 +1000,7 @@ function bindMapInteractions(){
   for (const v of chips){
     const b=document.createElement("button");
     b.textContent=v.label; b.dataset.id=v.id;
+    if (v.tip) b.title=v.tip;
     b.setAttribute("aria-pressed","false");
     b.onclick=()=>setView(viewById[v.id]);
     vseg.appendChild(b);
