@@ -209,6 +209,12 @@ def run(params: Params) -> None:
     html = TEMPLATE.read_text()
     blob = json.dumps(payload, separators=(",", ":"))
     html = html.replace("/*__PAYLOAD__*/null", blob)
+    # optional modular 3-D panel: injected only if the fragment exists;
+    # deleting kmer_clust/atlas3d.html removes the feature entirely
+    frag = TEMPLATE.parent / "atlas3d.html"
+    html = html.replace(
+        "<!--__ATLAS3D__-->", frag.read_text() if frag.exists() else ""
+    )
     DOCS.mkdir(exist_ok=True)
     out = DOCS / "index.html"
     tmp = out.with_suffix(".tmp")

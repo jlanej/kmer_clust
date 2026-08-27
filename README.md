@@ -153,6 +153,14 @@ Two additions keep the build annotation-agnostic while articulating the map:
   region), hsat1B 92%, while hsat3 (35%) and rDNA (43%) retain identity;
   13p and 15p carry large chromosome-knowing blocks while 14p/21p/22p are
   mostly commons. The atlas colors arms by chromosome, desaturated by mixing.
+- **The thread through word-space** (`atlas3d.html`, prototype): a 3-D panel
+  where the genome runs left→right and the current embedding plane rotates
+  around it — chromosome threads dive from the mainland into their satellite
+  islands, and a ▶ fly mode walks the genome with the map and territory
+  tracking in sync. Genome-wide or single-chromosome. Deliberately modular:
+  one fragment file injected at a template marker, reading the page's live
+  state (so it inherits every color mode, selection, and the k slider);
+  deleting `kmer_clust/atlas3d.html` removes the feature entirely.
 - **The k-ladder** (`kladder.py`): one full re-sketch and embedding per word
   length k ∈ {15,17,19,21,23,25}, each layout Procrustes-aligned to k=21 and
   quantized in a shared frame, so the atlas can expose **k as a slider** that

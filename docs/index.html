@@ -203,6 +203,251 @@ that word length, layouts Procrustes-aligned so the morph shows structure, not s
 <div id="card"></div>
 </div>
 
+<!-- ============================================================
+     atlas3d: prototype 3-D panel — the genome as a thread through
+     word-space. Genomic coordinate runs horizontally; the current
+     embedding plane (whatever the k-slider / view chips show) forms
+     the two axes rotating around it.
+
+     MODULAR BY DESIGN: this fragment is injected by site.py at the
+     <!--__ATLAS3D__--> marker only if this file exists. To remove
+     the feature entirely, delete this file. It reads the main
+     script's globals (P, N, A, chrom, chromOff, curX, curY,
+     pointColor, inSel, sel, css, setHover, showTip) and renders on
+     its own rAF loop, so it needs no hooks inside the main script.
+     ============================================================ -->
+<div class="bleed" id="t3d-section">
+<h2>The thread through word-space <span class="t3d-proto">prototype</span></h2>
+<p class="lede">Every chromosome is a walk: bin after bin, its vocabulary visits places on the map.
+Here the genome runs left→right and the map plane rotates around it — euchromatic stretches hum
+inside the mainland, centromeres dive to their satellite islands, acrocentric p-arms braid.
+Drag to rotate, ctrl-scroll to zoom, double-click to reset. It inherits the color mode, the
+selection, and the <b>k</b> slider above — sweep k and the threads reorganize. Press ▶ to fly
+the genome with the map and territory tracking in sync.</p>
+<div class="controls">
+  <div class="seg" id="t3d-chrom-seg">
+    <select id="t3d-chrom" aria-label="chromosome"></select>
+  </div>
+  <button class="ghost" id="t3d-play" title="fly along the genome">▶ fly</button>
+  <button class="ghost" id="t3d-spin" aria-pressed="true" title="auto-rotate">spin</button>
+  <button class="ghost" id="t3d-reset">reset view</button>
+</div>
+<div class="pane"><canvas id="t3d" class="plot"></canvas></div>
+</div>
+<style>
+.t3d-proto{font:11px/1 "IBM Plex Mono",monospace;letter-spacing:.08em;color:var(--muted);
+  text-transform:uppercase;vertical-align:middle;border:1px solid var(--hair2);
+  border-radius:6px;padding:3px 6px;margin-left:8px}
+#t3d-chrom{border:0;background:transparent;color:var(--ink);font:12.5px "IBM Plex Sans",sans-serif;
+  padding:6px 8px;cursor:pointer}
+#t3d-chrom:focus-visible{outline:2px solid var(--ring)}
+#t3d-play[aria-pressed="true"],#t3d-spin[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
+</style>
+<script>
+"use strict";
+// the fragment is injected mid-document, before the main script defines the
+// page globals — initialize after parsing completes so they exist
+document.addEventListener("DOMContentLoaded", () => {
+  const cv = document.getElementById("t3d"), ctx = cv.getContext("2d");
+  const sec = document.getElementById("t3d-section");
+  let W = 0, H = 0, DPR = 1;
+  let theta = 0.6, phi = 0.28, zoom = 1;
+  let spin = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let chromSel = -1;                 // -1 = genome-wide
+  let playing = false, playPos = 0;  // playhead in subset units
+  let dragging = null, visible = true, lastT = 0;
+  let hover3d = -1;
+
+  const selEl = document.getElementById("t3d-chrom");
+  selEl.append(new Option("all chromosomes", "-1"));
+  P.meta.chroms.forEach((c, i) => selEl.append(new Option(c, String(i))));
+  selEl.onchange = () => { chromSel = +selEl.value; playPos = 0; };
+
+  function subset() {   // [start, end) of bin indices currently shown
+    if (chromSel < 0) return [0, N];
+    return [chromOff[chromSel], chromOff[chromSel] + P.meta.chrom_nbins[chromSel]];
+  }
+
+  function size() {
+    const cand = [cv.getBoundingClientRect().width,
+                  cv.parentElement.getBoundingClientRect().width - 28,
+                  innerWidth - 80, 1200];
+    const w = cand.find(x => x > 40);   // collapsed panes fall through to 1200
+    const h = Math.max(360, Math.min(540, Math.round((innerHeight || 800) * 0.6)));
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    cv.width = Math.round(w * DPR); cv.height = h * DPR;
+    cv.style.height = h + "px";
+    W = w; H = h;
+  }
+
+  // project bin i -> [sx, sy, depth in -1..1]; gx = genome fraction 0..1
+  const PADX = 46, PADY = 26;
+  function project(i, s0, s1, ct, st, cp, sp) {
+    const gx = (i - s0) / Math.max(s1 - s0 - 1, 1);
+    const u = (curX[i] - 0.5), v = (curY[i] - 0.5);
+    const b = u * st + v * ct;          // in-plane height before pitch
+    const a = u * ct - v * st;          // in-plane depth before pitch
+    const hgt = b * cp - a * sp, dep = b * sp + a * cp;
+    const sc = zoom * (H - 2 * PADY) * 0.62;
+    return [PADX + gx * (W - 2 * PADX), H * 0.52 - hgt * sc, dep * zoom * 1.35];
+  }
+
+  function draw(now) {
+    if (!visible || !W) return;
+    const dt = Math.min(0.1, (now - lastT) / 1000 || 0.016); lastT = now;
+    if (spin && !dragging && !playing) theta += dt * 0.12;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const [s0, s1] = subset();
+    const ct = Math.cos(theta), st = Math.sin(theta);
+    const cp = Math.cos(phi), sp = Math.sin(phi);
+    const noise = css("--noise"), muted = css("--muted"), ink = css("--ink");
+
+    // genome axis + ticks
+    const y0 = H - PADY + 6;
+    ctx.strokeStyle = css("--hair2"); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PADX, y0); ctx.lineTo(W - PADX, y0); ctx.stroke();
+    ctx.fillStyle = muted; ctx.font = "10px 'IBM Plex Mono',monospace"; ctx.textAlign = "center";
+    if (chromSel < 0) {
+      for (let c = 0; c < P.meta.chroms.length; c++) {
+        const gx = PADX + (chromOff[c] / N) * (W - 2 * PADX);
+        ctx.strokeStyle = css("--hair"); ctx.beginPath();
+        ctx.moveTo(gx, y0 - 3); ctx.lineTo(gx, y0 + 3); ctx.stroke();
+        if (P.meta.chrom_nbins[c] / N * (W - 2 * PADX) > 26)
+          ctx.fillText(P.meta.chroms[c].replace("chr", ""),
+            PADX + ((chromOff[c] + P.meta.chrom_nbins[c] / 2) / N) * (W - 2 * PADX), y0 + 14);
+      }
+    } else {
+      const nb = P.meta.chrom_nbins[chromSel], stepMb = nb > 1200 ? 50 : nb > 400 ? 25 : 10;
+      for (let mb = 0; mb <= nb * P.meta.bin_bp / 1e6; mb += stepMb) {
+        const gx = PADX + (mb / (nb * P.meta.bin_bp / 1e6)) * (W - 2 * PADX);
+        ctx.strokeStyle = css("--hair"); ctx.beginPath();
+        ctx.moveTo(gx, y0 - 3); ctx.lineTo(gx, y0 + 3); ctx.stroke();
+        ctx.fillText(mb + "", gx, y0 + 14);
+      }
+      ctx.textAlign = "left";
+      ctx.fillText(P.meta.chroms[chromSel] + " (Mb)", PADX, y0 - 10);
+    }
+
+    // threads: consecutive-bin polylines per chromosome
+    ctx.lineWidth = 1;
+    const c0 = chromSel < 0 ? 0 : chromSel, c1 = chromSel < 0 ? P.meta.chroms.length : chromSel + 1;
+    for (let c = c0; c < c1; c++) {
+      ctx.strokeStyle = muted; ctx.globalAlpha = chromSel < 0 ? 0.10 : 0.22;
+      ctx.beginPath();
+      const lo = chromOff[c], hi = lo + P.meta.chrom_nbins[c];
+      for (let i = lo; i < hi; i++) {
+        const [x, y] = project(i, s0, s1, ct, st, cp, sp);
+        i === lo ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // points, depth-cued
+    for (let i = s0; i < s1; i++) {
+      const [x, y, d] = project(i, s0, s1, ct, st, cp, sp);
+      const near = (d + 1) / 2;
+      ctx.globalAlpha = (sel && !inSel(i)) ? 0.10 : 0.28 + 0.6 * near;
+      ctx.fillStyle = (sel && !inSel(i)) ? noise : pointColor(i);
+      const r = 0.9 + 1.5 * near * (chromSel < 0 ? 1 : 1.5);
+      ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
+    }
+    ctx.globalAlpha = 1;
+
+    // playhead comet
+    if (playing) {
+      playPos += dt * 60;                       // bins per second
+      if (playPos >= s1 - s0) playPos = 0;
+      const pi = s0 + Math.floor(playPos);
+      ctx.lineWidth = 1.6;
+      for (let t = 60; t >= 1; t--) {
+        const j = pi - t, j2 = j + 1;
+        if (j < s0) continue;
+        const [xa, ya] = project(j, s0, s1, ct, st, cp, sp);
+        const [xb, yb] = project(j2, s0, s1, ct, st, cp, sp);
+        ctx.strokeStyle = ink; ctx.globalAlpha = 0.5 * (1 - t / 60);
+        ctx.beginPath(); ctx.moveTo(xa, ya); ctx.lineTo(xb, yb); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      const [px_, py_] = project(pi, s0, s1, ct, st, cp, sp);
+      ctx.strokeStyle = ink; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(px_, py_, 6, 0, 7); ctx.stroke();
+      if ((draw._f = (draw._f || 0) + 1) % 3 === 0) setHover(pi);  // linked flight
+    } else if (hover3d >= 0) {
+      const [px_, py_] = project(hover3d, s0, s1, ct, st, cp, sp);
+      ctx.strokeStyle = ink; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.arc(px_, py_, 6, 0, 7); ctx.stroke();
+    }
+  }
+
+  function loop(now) { if (!W) size(); draw(now); requestAnimationFrame(loop); }
+
+  // interactions
+  cv.addEventListener("pointerdown", e => {
+    cv.setPointerCapture(e.pointerId);
+    dragging = { x: e.clientX, y: e.clientY }; spin = false;
+    document.getElementById("t3d-spin").setAttribute("aria-pressed", "false");
+  });
+  cv.addEventListener("pointermove", e => {
+    if (dragging) {
+      theta += (e.clientX - dragging.x) * 0.008;
+      phi = Math.max(-1.2, Math.min(1.2, phi + (e.clientY - dragging.y) * 0.006));
+      dragging = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    // hover: nearest projected point
+    const r = cv.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const [s0, s1] = subset();
+    const ct = Math.cos(theta), st = Math.sin(theta);
+    const cp = Math.cos(phi), sp = Math.sin(phi);
+    let best = -1, bd = 130;
+    const step = (s1 - s0) > 8000 ? 2 : 1;      // hover decimation genome-wide
+    for (let i = s0; i < s1; i += step) {
+      const [x, y] = project(i, s0, s1, ct, st, cp, sp);
+      const d = (x - mx) * (x - mx) + (y - my) * (y - my);
+      if (d < bd) { bd = d; best = i; }
+    }
+    hover3d = best;
+    if (best >= 0) { setHover(best); showTip(e, best); }
+    else setHover(-1);
+  });
+  const endDrag = () => { dragging = null; };
+  cv.addEventListener("pointerup", endDrag);
+  cv.addEventListener("pointercancel", endDrag);
+  cv.addEventListener("pointerleave", () => { hover3d = -1; if (!playing) setHover(-1); });
+  cv.addEventListener("wheel", e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    zoom = Math.max(0.4, Math.min(6, zoom * Math.exp(-e.deltaY * 0.01)));
+  }, { passive: false });
+  cv.addEventListener("dblclick", () => { theta = 0.6; phi = 0.28; zoom = 1; });
+
+  document.getElementById("t3d-play").onclick = function () {
+    playing = !playing;
+    this.setAttribute("aria-pressed", String(playing));
+    this.textContent = playing ? "❚❚ pause" : "▶ fly";
+    if (!playing) setHover(-1);
+  };
+  document.getElementById("t3d-spin").onclick = function () {
+    spin = !spin;
+    this.setAttribute("aria-pressed", String(spin));
+  };
+  document.getElementById("t3d-reset").onclick = () => { theta = 0.6; phi = 0.28; zoom = 1; };
+
+  new IntersectionObserver(es => { visible = es[0].isIntersecting && !document.hidden; },
+    { rootMargin: "80px" }).observe(cv);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) visible = false; });
+  addEventListener("resize", () => { clearTimeout(size._t); size._t = setTimeout(size, 150); });
+  size();
+  draw(performance.now());   // synchronous first frame (rAF pauses in hidden tabs)
+  window.__t3dDraw = draw;   // debug/verification handle
+  requestAnimationFrame(loop);
+});
+</script>
+
+
 <h2>Distance, exactly</h2>
 <p class="lede">The map above is a model. This is not: every pair of 1&nbsp;Mb bins compared by exact
 sketch intersection. The matrix shows exact Jaccard (∛-stretched so faint structure survives);
