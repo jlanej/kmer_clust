@@ -133,6 +133,9 @@ tbody tr:hover td{color:var(--ink)}
 tbody tr.sel td{background:var(--chip);color:var(--ink)}
 td .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px;
   vertical-align:-1px}
+.methodfig{margin:8px 0 28px}
+.methodfig svg{width:100%;max-width:960px;height:auto;display:block;color:var(--ink)}
+.methodfig figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;max-width:80ch;line-height:1.5}
 .methods{display:grid;grid-template-columns:2fr 1fr;gap:26px;max-width:1020px}
 @media (max-width:800px){.methods{grid-template-columns:1fr}}
 .methods p{color:var(--ink2);font-size:14px;max-width:66ch}
@@ -155,10 +158,10 @@ footer a{color:var(--ink2)}
   <h1>CHM13 Word Atlas</h1>
   <p class="thesis">A map of the complete human genome in which position is decided purely by
   <em>k&#8209;mer vocabulary</em> — no aligner, no reference coordinate, no orthology.
-  Every dot is a 100&nbsp;kb bin, sketched by FracMinHash, embedded by randomized SVD&nbsp;→&nbsp;UMAP,
-  grouped by HDBSCAN. Bins land next to each other because they use the same words.
+  Every dot is one of <b id="nbins"></b> bins of 100&nbsp;kb — sketched by FracMinHash, embedded by
+  randomized SVD&nbsp;→&nbsp;UMAP, grouped by HDBSCAN into <b id="nclust"></b> vocabulary clusters.
+  Bins land next to each other because they use the same words.
   Annotation judges the map; it never builds it.</p>
-  <div class="metric-strip" id="metrics"></div>
 </header>
 
 <h2>Map ↔ territory</h2>
@@ -252,6 +255,7 @@ five acrocentrics). Both directions come out as biology predicts — αSat sits 
 above chance, rDNA barely doubles it — and the αSat confusions that do occur are the known shared
 HOR families. A method that secretly encodes position would ace both; one blind to fine vocabulary
 would fail the first.</p>
+<div class="metric-strip" id="metrics" style="margin:18px 0 24px"></div>
 <div class="figgrid" id="figs"></div>
 
 <h2>The clusters</h2>
@@ -263,19 +267,131 @@ would fail the first.</p>
 <div class="tablewrap"><table id="ctable"></table></div>
 
 <h2>Method</h2>
+<figure class="methodfig">
+<svg viewBox="0 0 920 200" role="img"
+  aria-label="From letters to neighborhoods: every 21-letter window is a word; a fixed hash keeps one word in twenty, the same words everywhere; two bins' kept words are compared; bins sharing vocabulary land next to each other on the map.">
+  <defs><marker id="mfa" viewBox="0 0 8 6" refX="7" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+    <polygon points="0,0 8,3 0,6" fill="currentColor"/></marker></defs>
+  <!-- 1 · words -->
+  <text x="0" y="18" font-size="12.5" font-weight="600">1 · words</text>
+  <g opacity="0.62"><text x="0" y="34" font-size="11">every 21-letter window</text></g>
+  <text x="0" y="79" font-size="11" font-family="ui-monospace,monospace" textLength="196" lengthAdjust="spacingAndGlyphs">ACGGTTACACAGGATTACGT</text>
+  <rect x="28" y="63" width="88" height="22" rx="4" fill="#3987e5" fill-opacity="0.13" stroke="#3987e5"/>
+  <rect x="38" y="63" width="88" height="22" rx="4" fill="none" stroke="#3987e5" stroke-dasharray="3 3" opacity="0.55"/>
+  <line x1="62" y1="102" x2="108" y2="102" stroke="currentColor" opacity="0.6" marker-end="url(#mfa)"/>
+  <g opacity="0.62"><text x="60" y="118" font-size="10.5">slides one letter</text></g>
+  <g opacity="0.62"><text x="0" y="152" font-size="11">a bin = a bag of ~100,000 words</text></g>
+  <!-- arrow -->
+  <line x1="208" y1="95" x2="238" y2="95" stroke="currentColor" marker-end="url(#mfa)"/>
+  <g opacity="0.62"><text x="223" y="86" font-size="10.5" text-anchor="middle">hash</text></g>
+  <!-- 2 · the lottery -->
+  <text x="248" y="18" font-size="12.5" font-weight="600">2 · the lottery</text>
+  <g opacity="0.62"><text x="248" y="34" font-size="11">keep a word if its hash lands below the line</text></g>
+  <line x1="248" y1="95" x2="436" y2="95" stroke="currentColor" opacity="0.45"/>
+  <g opacity="0.62"><text x="248" y="112" font-size="10.5">0</text>
+  <text x="436" y="112" font-size="10.5" text-anchor="end">2⁶⁴</text></g>
+  <line x1="286" y1="68" x2="286" y2="120" stroke="#3987e5" stroke-width="2"/>
+  <text x="286" y="60" font-size="10.5" text-anchor="middle" fill="#3987e5">keep-line (1 in 20)</text>
+  <circle cx="259" cy="88" r="4" fill="#3987e5"/>
+  <circle cx="272" cy="101" r="4" fill="#3987e5"/>
+  <circle cx="279" cy="82" r="4" fill="#3987e5"/>
+  <g fill="none" stroke="currentColor" opacity="0.45">
+    <circle cx="303" cy="86" r="3.5"/><circle cx="321" cy="100" r="3.5"/>
+    <circle cx="337" cy="84" r="3.5"/><circle cx="355" cy="98" r="3.5"/>
+    <circle cx="374" cy="87" r="3.5"/><circle cx="393" cy="101" r="3.5"/>
+    <circle cx="411" cy="85" r="3.5"/><circle cx="427" cy="97" r="3.5"/>
+  </g>
+  <text x="248" y="152" font-size="11" font-weight="600">same word → same ticket, in every bin</text>
+  <!-- arrow -->
+  <line x1="444" y1="95" x2="474" y2="95" stroke="currentColor" marker-end="url(#mfa)"/>
+  <g opacity="0.62"><text x="459" y="86" font-size="10.5" text-anchor="middle">compare</text></g>
+  <!-- 3 · shared words -->
+  <text x="484" y="18" font-size="12.5" font-weight="600">3 · shared words</text>
+  <g opacity="0.62"><text x="484" y="34" font-size="11">sketch overlap ≈ vocabulary overlap</text></g>
+  <g opacity="0.8"><text x="484" y="80" font-size="11">bin A</text>
+  <text x="484" y="130" font-size="11">bin B</text></g>
+  <g>
+    <rect x="522" y="66" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <rect x="548" y="66" width="22" height="18" rx="3" fill="#3987e5" fill-opacity="0.2" stroke="#3987e5"/>
+    <rect x="574" y="66" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <rect x="600" y="66" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <rect x="626" y="66" width="22" height="18" rx="3" fill="#3987e5" fill-opacity="0.2" stroke="#3987e5"/>
+    <rect x="652" y="66" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <rect x="522" y="116" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <rect x="548" y="116" width="22" height="18" rx="3" fill="#3987e5" fill-opacity="0.2" stroke="#3987e5"/>
+    <rect x="574" y="116" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <rect x="600" y="116" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <rect x="626" y="116" width="22" height="18" rx="3" fill="#3987e5" fill-opacity="0.2" stroke="#3987e5"/>
+    <rect x="652" y="116" width="22" height="18" rx="3" fill="none" stroke="currentColor" opacity="0.5"/>
+    <line x1="559" y1="84" x2="559" y2="116" stroke="#3987e5" stroke-dasharray="3 3"/>
+    <line x1="637" y1="84" x2="637" y2="116" stroke="#3987e5" stroke-dasharray="3 3"/>
+  </g>
+  <g opacity="0.62"><text x="484" y="158" font-size="11">different words never collide by luck at k=21</text></g>
+  <!-- arrow -->
+  <line x1="684" y1="95" x2="712" y2="95" stroke="currentColor" marker-end="url(#mfa)"/>
+  <g opacity="0.62"><text x="698" y="86" font-size="10.5" text-anchor="middle">embed</text></g>
+  <!-- 4 · the map -->
+  <text x="722" y="18" font-size="12.5" font-weight="600">4 · the map</text>
+  <g opacity="0.62"><text x="722" y="34" font-size="11">shared words ⇒ neighbors</text></g>
+  <rect x="722" y="50" width="188" height="102" rx="8" fill="none" stroke="currentColor" opacity="0.35"/>
+  <g fill="currentColor" opacity="0.4">
+    <circle cx="740" cy="70" r="2.5"/><circle cx="764" cy="94" r="2.5"/><circle cx="752" cy="120" r="2.5"/>
+    <circle cx="792" cy="67" r="2.5"/><circle cx="808" cy="132" r="2.5"/><circle cx="830" cy="79" r="2.5"/>
+    <circle cx="856" cy="126" r="2.5"/><circle cx="874" cy="70" r="2.5"/><circle cx="890" cy="99" r="2.5"/>
+    <circle cx="772" cy="138" r="2.5"/><circle cx="840" cy="141" r="2.5"/><circle cx="893" cy="134" r="2.5"/>
+    <circle cx="802" cy="92" r="2.5"/>
+  </g>
+  <circle cx="853" cy="95" r="4.5" fill="#3987e5"/>
+  <circle cx="864" cy="103" r="4.5" fill="#3987e5"/>
+  <text x="845" y="87" font-size="9.5" fill="#3987e5">A</text>
+  <text x="872" y="115" font-size="9.5" fill="#3987e5">B</text>
+  <g opacity="0.62"><text x="722" y="170" font-size="11">position = vocabulary, nothing else</text></g>
+</svg>
+<figcaption>How a genome becomes a map: every 21-letter window is a word; a fixed hash function
+runs the same 1-in-20 lottery on every word everywhere, so two bins' kept words can be compared
+as a fair sample of their full vocabularies; bins that spend their vocabulary the same way land
+next to each other.</figcaption>
+</figure>
 <div class="methods">
   <div>
-    <p><b>Sketch.</b> Every 100 kb bin of CHM13v2.0 (chr1–22, X, Y) is reduced to a FracMinHash
-    sketch: canonical 21-mers hashed with MurmurHash3-x64-128 (seed 42), kept when
-    hash ≤ 2<sup>64</sup>/scaled — bit-identical to sourmash, verified by test. The base store keeps
-    scaled=20 with within-bin multiplicities; every coarser sketch is a subset of it.</p>
-    <p><b>Model (track A).</b> Bins × shared-hashes matrix at scaled=50; hashes private to one bin
-    are dropped from the model (each bin's private fraction is kept as a diagnostic — color the map
-    by it). Weights log1p(multiplicity) × mild IDF, L2-normalized; randomized subspace SVD on the
-    implicit Gram operator; UMAP (cosine) for display; HDBSCAN in a 12-d UMAP space for clusters.</p>
-    <p><b>Distance (track B).</b> Bins boosted to 1 Mb so sketches are deep enough that pairwise
-    Jaccard and containment are essentially exact, then one sparse matmul gives all
-    ~4.9 M pairs. The two tracks agree or the model is wrong — that agreement is measured, not assumed.</p>
+    <p><b>Words.</b> Cut CHM13v2.0 (chr1–22, X, Y) into 100 kb bins and treat each bin as a
+    <em>document</em> whose words are its 21-letter subsequences: every sliding window, with a word
+    and its reverse complement counted as the same word (each is read in whichever direction is
+    alphabetically first). A bin holds ~100,000 words; the genome holds ~2 billion distinct ones —
+    far too many to compare directly, so we sample.</p>
+    <p><b>The lottery (FracMinHash).</b> Every word goes through a hash function — a fixed
+    scrambler that assigns it an effectively random number — and is kept only if that number falls
+    below a bar set to pass 1 word in 20. The trick is that the lottery is rigged identically
+    everywhere: a given word gets the same number on chr1 as on chr21, so it is kept in
+    <em>every</em> bin that contains it or in none. That makes any two sketches directly
+    comparable, and makes their overlap an unbiased estimate of the overlap of the full
+    vocabularies. (This is sourmash's FracMinHash — MurmurHash3, seed 42, keep when
+    hash ≤ 2<sup>64</sup>/20 — and our engine is verified bit-identical to it.) Each kept word also
+    carries its within-bin count, because satellite DNA expresses identity by saying a few words
+    many times. And because a shared 21-letter word is essentially never a coincidence
+    (4<sup>21</sup> ≈ 1,400× the genome), sharing vocabulary means sharing ancestry.</p>
+    <p><b>The matrix.</b> Bins × kept-words — literally the word-count matrix of text retrieval,
+    with the same weighting text search uses: words private to a single bin can connect nothing
+    and are set aside (each bin's private fraction becomes the "private vocabulary" color mode);
+    the rest are weighted by log-count, damped by how many bins use them (a rare shared word says
+    more than a ubiquitous Alu core), and each bin is scaled to unit length so large and small
+    vocabularies compare fairly. Two bins are similar when they spend their vocabulary in the same
+    proportions — cosine similarity, exactly as in document search.</p>
+    <p><b>The map.</b> The matrix still has ~2 million word-columns, so randomized SVD finds the
+    128 recurring word-combinations — think <em>themes</em> — that explain most of it, giving each
+    bin 128 coordinates. UMAP then builds every bin's nearest-neighbor graph in that space and
+    flattens it, preserving who-sits-next-to-whom rather than global distances: a seating chart,
+    not a scale drawing. Position on this page therefore encodes one thing only: these bins use
+    the same words.</p>
+    <p><b>The clusters.</b> HDBSCAN finds crowds in a 12-dimensional version of the same layout —
+    regions dense enough to count as a group — with no preset number of clusters and an explicit
+    noise label for bins that belong to no crowd. Clusters are named afterwards from annotation,
+    which never enters the model.</p>
+    <p><b>Distance, exactly (track B).</b> The map is a model, so we also do it the slow way:
+    boost bins to 1 Mb (sketches of ~47,000 words each), intersect every pair, and report exact
+    Jaccard — the shared fraction of the union. One sparse matrix product yields all ~4.9 million
+    pairs, and the model must agree with this ground truth or lose; that agreement is measured on
+    the scorecard above, not assumed.</p>
     <p><b>Views.</b> The <b>k</b> slider re-sketches the genome at each word length 15–25.
     Long words mean identity — a shared 21-mer (4<sup>21</sup> ≈ 1,400× the genome) is evidence of
     common descent — while short words drift toward composition (4<sup>15</sup> is about the
@@ -793,20 +909,23 @@ function buildLegend(){
 }
 function syncLegend(){ buildLegend(); }
 
-/* ---------- metrics strip ---------- */
+/* ---------- annotated scorecard (in the trust section) ---------- */
 const M=P.metrics;
+document.getElementById("nbins").textContent = N.toLocaleString();
+document.getElementById("nclust").textContent = M.n_clusters;
 function metric(v,s){ return `<div class="metric"><div class="v">${v}</div><div class="s">${s}</div></div>`; }
 document.getElementById("metrics").innerHTML =
-  metric(N.toLocaleString(), "bins of 100 kb — the whole assembly, chr1–Y") +
-  metric(M.n_clusters, `vocabulary clusters (noise ${(M.noise_frac*100).toFixed(1)}%)`) +
+  metric(M.n_clusters+" clusters", `found by density alone — no target count was set, and ${(M.noise_frac*100).toFixed(0)}% of bins fit no crowd and stay honestly grey as noise`) +
   (M.sat_cluster_weighted_purity!=null? metric((M.sat_cluster_weighted_purity*100).toFixed(0)+"%",
-    "satellite-cluster purity vs censat, size-weighted"):"") +
+    "of a typical satellite cluster is a single censat family — the satellite taxonomy re-emerges without ever being taught"):"") +
   (M.alpha_chrom_knn_acc!=null? metric((M.alpha_chrom_knn_acc*100).toFixed(0)+"%",
-    `αSat HOR bin → chromosome, kNN CV (chance ${(M.alpha_chrom_chance*100).toFixed(0)}%)`):"") +
+    `of αSat HOR bins are assigned to their own centromere by vocabulary alone (chance ${(M.alpha_chrom_chance*100).toFixed(0)}%) — and the residual confusions are HOR families those chromosomes genuinely share`):"") +
   (M.rdna_chrom_knn_acc!=null? metric((M.rdna_chrom_knn_acc*100).toFixed(0)+"%",
-    `rDNA bin → chromosome — the predicted weak side (chance ${(M.rdna_chrom_chance*100).toFixed(0)}%)`):"") +
+    `for the same test on rDNA — the predicted weak side, because rDNA arrays recombine across the five acrocentrics (chance ${(M.rdna_chrom_chance*100).toFixed(0)}%)`):"") +
+  (M.umap_seed_semantic_acc? metric((Math.min(...M.umap_seed_semantic_acc)*100).toFixed(0)+"%",
+    "satellite-family separability under every UMAP seed — layouts wobble, meaning doesn't"):"") +
   (M.trackA_vs_trackB_spearman!=null? metric("ρ "+M.trackA_vs_trackB_spearman.toFixed(2),
-    "model distance vs exact Jaccard, 1 Mb pairs"):"");
+    "rank agreement between the model's distances and exact sketch Jaccard over all 1 Mb pairs — the shortcut is audited against ground truth"):"");
 
 /* ---------- params ---------- */
 document.getElementById("params").innerHTML = [
