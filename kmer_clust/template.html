@@ -64,8 +64,9 @@ button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .lchip .sw{width:10px;height:10px;border-radius:3px;flex:none}
 .gradbar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
 .gradbar canvas{border-radius:4px;border:1px solid var(--hair)}
-.panes{display:grid;grid-template-columns:minmax(340px,460px) 1fr;gap:18px}
-@media (max-width:900px){.panes{grid-template-columns:1fr}}
+.bleed{position:relative;width:min(100vw - 40px,1880px);left:50%;transform:translateX(-50%)}
+.panes{display:grid;grid-template-columns:minmax(420px,1.15fr) minmax(380px,1fr);gap:18px}
+@media (max-width:980px){.panes{grid-template-columns:1fr}.bleed{width:100%;left:0;transform:none}}
 .pane{background:var(--card);border:1px solid var(--hair);border-radius:14px;
   padding:14px;box-shadow:var(--shadow);position:relative}
 .pane h3{margin:0 0 2px;font-size:13px;font-weight:600}
@@ -83,6 +84,9 @@ canvas.plot{width:100%;display:block;border-radius:8px;cursor:crosshair;
 .mapknobs .seg button{padding:5px 9px;font-size:11.5px}
 .mapknobs label{display:inline-flex;align-items:center;gap:6px}
 .mapknobs input[type="range"]{width:86px;accent-color:var(--ink2);margin:0}
+.mapknobs #kn-k{width:150px}
+.mapknobs #kval{color:var(--ink);font-weight:600;min-width:2ch}
+#kread{color:var(--muted)}
 #tooltip{position:fixed;z-index:30;pointer-events:none;background:var(--card);
   border:1px solid var(--hair2);border-radius:9px;box-shadow:var(--shadow);
   padding:9px 11px;font-size:12px;display:none;max-width:260px;line-height:1.5}
@@ -156,8 +160,11 @@ footer a{color:var(--ink2)}
 <p class="lede">The map is the UMAP plane; the territory is the genome in its own coordinates.
 Hover either side and the other answers. Click a dot, a stripe, a legend chip, or a table row to
 isolate one cluster. Pinch or double-click to zoom the map, drag to pan, and shift-drag (or the
-⬚&nbsp;select tool) to box a region — the territory and a region report answer. Press
+⬚&nbsp;select tool) to box a region — the territory and a region report answer. Sweep the
+<b>k</b> slider to change the vocabulary itself: every stop is a full re-sketch of the genome at
+that word length, layouts Procrustes-aligned so the morph shows structure, not spin. Press
 <span style="font-family:'IBM Plex Mono',monospace">esc</span> to release a selection.</p>
+<div class="bleed">
 <div class="controls">
   <div class="seg" id="modes" role="group" aria-label="color by"></div>
   <button class="ghost" id="clearsel" hidden>clear selection</button>
@@ -175,9 +182,13 @@ isolate one cluster. Pinch or double-click to zoom the map, drag to pan, and shi
     </div>
     <canvas id="map" class="plot"></canvas>
     <div class="mapknobs">
+      <label id="kwrap" hidden title="word length: every stop is a full re-sketch of the genome, layouts aligned for morphing">k
+        <input type="range" id="kn-k" min="0" max="5" step="1" value="3">
+        <b id="kval"></b></label>
       <div class="seg" id="viewseg" role="group" aria-label="embedding view"></div>
       <label>size <input type="range" id="kn-size" min="0.5" max="3" step="0.05" value="1"></label>
       <label>opacity <input type="range" id="kn-alpha" min="0.25" max="1" step="0.05" value="1"></label>
+      <span id="kread"></span>
     </div>
   </div>
   <div class="pane">
@@ -187,6 +198,7 @@ isolate one cluster. Pinch or double-click to zoom the map, drag to pan, and shi
   </div>
 </div>
 <div id="card"></div>
+</div>
 
 <h2>Distance, exactly</h2>
 <p class="lede">The map above is a model. This is not: every pair of 1&nbsp;Mb bins compared by exact
@@ -344,9 +356,10 @@ let vs=1, vtx=0, vty=0;   // map view: scale + translation, CSS px
 /* embedding views: alternative precomputed layouts, morphable client-side */
 const VIEWS = [{id:"main", label:"baseline", qx, qy}];
 if (P.views) for (const v of P.views) VIEWS.push({
-  id:v.id, label:v.label,
+  id:v.id, label:v.label, metrics:v.metrics,
   qx:new Uint16Array(bytes(v.qx).buffer), qy:new Uint16Array(bytes(v.qy).buffer),
 });
+const viewById={}; VIEWS.forEach((v,i)=>viewById[v.id]=i);
 for (const v of VIEWS){
   v.nx=new Float32Array(N); v.ny=new Float32Array(N);
   for(let i=0;i<N;i++){ v.nx[i]=v.qx[i]/65535; v.ny[i]=v.qy[i]/65535; }
@@ -356,17 +369,36 @@ let curX=VIEWS[0].nx.slice(), curY=VIEWS[0].ny.slice();
 let knSize=1, knAlpha=1;
 function bpx(i){ return PAD + curX[i]*(mw-2*PAD); }
 function bpy(i){ return PAD + (1-curY[i])*(mh-2*PAD); }
-function setView(idx){
-  viewIdx=idx;
+function fmtMetrics(m){
+  if(!m) return "";
+  const parts=[];
+  if(m.mainland_score!=null) parts.push(`mainland R² ${m.mainland_score.toFixed(2)}`);
+  if(m.sat_sem_2d!=null) parts.push(`sat fam ${(m.sat_sem_2d*100).toFixed(0)}%`);
+  if(m.alpha_chrom!=null) parts.push(`αSat→chr ${(m.alpha_chrom*100).toFixed(0)}%`);
+  return parts.join(" · ");
+}
+function syncViewUI(){
+  const v=VIEWS[viewIdx];
   for(const b of document.getElementById("viewseg").children)
-    b.setAttribute("aria-pressed", +b.dataset.v===idx);
+    b.setAttribute("aria-pressed", String(b.dataset.id===v.id));
+  const SL=P.meta.slider_ids||[];
+  const sid=v.id==="main"? "k"+P.meta.k : v.id;
+  const si=SL.indexOf(sid);
+  const kn=document.getElementById("kn-k");
+  if (si>=0 && kn){ kn.value=si; document.getElementById("kval").textContent=SL[si].slice(1); }
+  const eff=(v.id==="main" && viewById[sid]!=null)? VIEWS[viewById[sid]] : v;
+  document.getElementById("kread").textContent = fmtMetrics(eff && eff.metrics);
+}
+function setView(idx, dur){
+  viewIdx=idx;
+  syncViewUI();
   const to=VIEWS[idx];
   if (matchMedia("(prefers-reduced-motion: reduce)").matches){
     curX=to.nx.slice(); curY=to.ny.slice();
     buildGrid(); mapBase=null; drawMap(); return;
   }
   const fx=curX.slice(), fy=curY.slice();
-  const t0=performance.now(), DUR=700;
+  const t0=performance.now(), DUR=dur||700;
   if (morph) cancelAnimationFrame(morph);
   setHover(-1);
   const step=now=>{
@@ -808,7 +840,7 @@ function layout(){
   dpr=Math.min(devicePixelRatio||1,2);
   invalidate();
   const mr=map.getBoundingClientRect();
-  [mw,mh]=sizeCanvas(map, Math.max(360, Math.min(520, mr.width)));
+  [mw,mh]=sizeCanvas(map, Math.max(420, Math.min(Math.round(innerHeight*0.78), mr.width)));
   [rw,rh]=sizeCanvas(rib, RTOP+ROWH*P.meta.chroms.length+6);
   drawMap(); drawRibbon(); drawHeat();
 }
@@ -918,14 +950,24 @@ function bindMapInteractions(){
   document.getElementById("kn-alpha").oninput = e=>{
     knAlpha=+e.target.value; mapBase=null; drawMap(); };
   const vseg=document.getElementById("viewseg");
-  VIEWS.forEach((v,i)=>{
+  const SL=P.meta.slider_ids||[];
+  const chips=VIEWS.filter(v=>v.id!=="main" && !SL.includes(v.id));
+  for (const v of chips){
     const b=document.createElement("button");
-    b.textContent=v.label; b.dataset.v=i;
-    b.setAttribute("aria-pressed", i===0);
-    b.onclick=()=>setView(i);
+    b.textContent=v.label; b.dataset.id=v.id;
+    b.setAttribute("aria-pressed","false");
+    b.onclick=()=>setView(viewById[v.id]);
     vseg.appendChild(b);
-  });
-  if (VIEWS.length<2) vseg.style.display="none";
+  }
+  if (!chips.length) vseg.style.display="none";
+  if (SL.length){
+    const kn=document.getElementById("kn-k");
+    document.getElementById("kwrap").hidden=false;
+    kn.min=0; kn.max=SL.length-1; kn.step=1;
+    kn.value=Math.max(0, SL.indexOf("k"+P.meta.k));
+    kn.oninput=()=>setView(viewById[SL[+kn.value]], 420);
+  }
+  syncViewUI();
 }
 
 buildGrid(); buildLegend(); drawTable();

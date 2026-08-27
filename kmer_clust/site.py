@@ -104,35 +104,53 @@ def build_payload(params: Params) -> dict:
         )
         payload["arrays"]["pstrength"] = b64(u8(per["strength"]))
 
-    # alternative embedding views from the structure lab (satellite-health gated)
-    lab_json, lab_npz = OUT / "structure_lab.json", OUT / "structure_lab.npz"
-    if lab_json.exists() and lab_npz.exists():
-        lab = json.loads(lab_json.read_text())
-        by_tag = {r["tag"]: r for r in lab["results"]}
-        base = by_tag.get("a000")
-        store = np.load(lab_npz)
-        a_tag = f"a{int(lab['a_best'] * 100):03d}"
-        labels = {a_tag: f"equal voice (α={lab['a_best']})",
-                  "concat": "dual vocab k21⊕k17", "k17": "k=17 only"}
+    # alternative embedding views: the k-ladder (Procrustes-aligned to k=21,
+    # quantized in ONE shared frame so morphing shows structure, not scaling)
+    # plus the dual-vocabulary view from the structure lab
+    kl_json, kl_npz = OUT / "kladder.json", OUT / "kladder.npz"
+    lab_json = OUT / "structure_lab.json"
+    if kl_json.exists() and kl_npz.exists():
+        kl = json.loads(kl_json.read_text())
+        store = np.load(kl_npz)
+        names = [f"k{k}" for k in kl["ks"]] + (["concat"] if "concat" in store else [])
+        allxy = np.stack([store[n] for n in names])
+        lo = allxy.reshape(-1, 2).min(axis=0)
+        hi = allxy.reshape(-1, 2).max(axis=0)
+
+        def qshared(v, ax):
+            return np.round(
+                (v - lo[ax]) / max(hi[ax] - lo[ax], 1e-9) * 65535
+            ).astype(np.uint16)
+
+        concat_metrics = None
+        if lab_json.exists():
+            lab = json.loads(lab_json.read_text())
+            concat_metrics = next(
+                (r for r in lab["results"] if r["tag"] == "concat"), None
+            )
         views = []
-        for tag in dict.fromkeys(["concat", "k17", a_tag]):
-            r = by_tag.get(tag)
-            if tag == "a000" or r is None or f"{tag}_xy" not in store:
-                continue
-            if base and (
-                r["sat_sem_2d"] < base["sat_sem_2d"] - 0.02
-                or r["alpha_chrom"] < base["alpha_chrom"] - 0.02
-            ):
-                continue
-            xy = store[f"{tag}_xy"]
-            qx2, _, _ = quant16(xy[:, 0])
-            qy2, _, _ = quant16(xy[:, 1])
-            views.append({"id": tag, "label": labels.get(tag, tag),
-                          "qx": b64(qx2), "qy": b64(qy2)})
-            if len(views) == 2:
-                break
-        if views:
-            payload["views"] = views
+        for n in names:
+            xy = store[n]
+            if n == "concat":
+                label, met = "dual vocab k21⊕k17", concat_metrics
+            else:
+                k = int(n[1:])
+                label, met = f"k={k}", kl["metrics"].get(str(k))
+            views.append({
+                "id": n, "label": label,
+                "qx": b64(qshared(xy[:, 0], 0)), "qy": b64(qshared(xy[:, 1], 1)),
+                "metrics": {
+                    key: met[key]
+                    for key in ("mainland_score", "sat_sem_2d", "alpha_chrom")
+                    if met and key in met
+                } if met else None,
+            })
+        payload["views"] = views
+        payload["meta"]["slider_ids"] = [f"k{k}" for k in kl["ks"]]
+        # the k=21 ladder layout IS the baseline (same seed, same path); use it
+        # for the primary arrays so slider morphs start from a shared frame
+        payload["arrays"]["qx"] = b64(qshared(store["k21"][:, 0], 0))
+        payload["arrays"]["qy"] = b64(qshared(store["k21"][:, 1], 1))
 
     # ---- 1 Mb pairwise heatmap as grayscale PNG ----------------------------
     from PIL import Image
