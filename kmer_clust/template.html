@@ -205,10 +205,11 @@ that word length, layouts Procrustes-aligned so the morph shows structure, not s
 <p class="lede">The map above is a model. This is not: every pair of 1&nbsp;Mb bins compared by exact
 sketch intersection. The matrix shows exact Jaccard (∛-stretched so faint structure survives);
 the dendrogram ordering and pairwise clusters use max-containment ANI,
-<span style="font-family:'IBM Plex Mono',monospace">cANI&nbsp;=&nbsp;C<sup>1/k</sup></span>, which is
-robust to the wild sketch-size differences between satellite and unique sequence. In genome order
-the diagonal blocks are chromosomes; flip to dendrogram order and the satellite families reassemble
-from across the genome. Hover for the pair behind any pixel.</p>
+<span style="font-family:'IBM Plex Mono',monospace">cANI&nbsp;=&nbsp;C<sup>1/k</sup></span>, robust to
+the wild sketch-size differences between satellite and unique sequence. The margins carry two
+annotation strips — chromosome, then satellite class — so the blocks name themselves in either
+order. Ctrl-scroll to zoom, drag to pan, and <b>click any pixel</b> to interrogate its pair: the
+two loci light up on the map and the territory above.</p>
 <div class="controls">
   <div class="seg" id="heatorder" role="group" aria-label="heatmap order">
     <button aria-pressed="true" data-o="genome" title="bins in genome coordinate order — diagonal blocks are chromosomes">genome order</button>
@@ -216,12 +217,23 @@ from across the genome. Hover for the pair behind any pixel.</p>
   </div>
 </div>
 <div class="heatwrap">
-  <div class="pane"><canvas id="heat" class="plot"></canvas></div>
+  <div class="pane">
+    <div class="maptools">
+      <button id="ht-out" title="zoom out">−</button>
+      <button id="ht-in" title="zoom in">+</button>
+      <button id="ht-reset" title="reset to the full matrix">reset</button>
+    </div>
+    <canvas id="heat" class="plot"></canvas>
+  </div>
   <div>
     <div id="heatreadout">hover the matrix…</div>
-    <p class="lede" style="margin-top:14px">Off-diagonal constellations in genome order are the
-    biology: acrocentric short arms quoting each other, segmental duplications, satellite families
-    shared between chromosomes.</p>
+    <div class="gradbar" style="margin-top:12px" title="exact Jaccard, cube-root color scale">
+      <span>J&nbsp;0</span><canvas id="heatbar" width="150" height="10"></canvas><span>1</span>
+    </div>
+    <p class="lede" style="margin-top:14px">Off-diagonal constellations are the biology:
+    acrocentric short arms quoting each other, segmental duplications, satellite families shared
+    between chromosomes. Zoom into a bright speck until single 1&nbsp;Mb pairs resolve, then click
+    to see who is talking to whom.</p>
   </div>
 </div>
 
@@ -795,6 +807,27 @@ const hChrom=bytes(P.heatmap.chrom),
       hStart=new Uint16Array(bytes(P.heatmap.start_mb).buffer),
       hLeaf=new Int16Array(bytes(P.heatmap.leaf_order).buffer),
       hClust=new Int16Array(bytes(P.heatmap.cluster).buffer);
+const hCensat = P.heatmap.censat ? bytes(P.heatmap.censat) : null;
+const MGL=22, MGT=36;                       // annotation-strip margins
+let hSide=0, hArea=0, hBase=null, hPos=null;
+let hv={r0:0, c0:0, span:hn};               // zoom window (rows, cols, extent)
+let hPair=null, hCursor=null, hDrag=null;
+let hLastR=0, hRAF=0;
+function hClamp(){
+  hv.span=Math.max(16, Math.min(hn, hv.span));
+  hv.r0=Math.max(0, Math.min(hn-hv.span, hv.r0));
+  hv.c0=Math.max(0, Math.min(hn-hv.span, hv.c0));
+}
+function hChildren(p){
+  const c=hChrom[p], base=chromOff[c], nb=P.meta.chrom_nbins[c];
+  const per=Math.round(P.heatmap.bin_mb*1e6/P.meta.bin_bp), start=hStart[p]*per;
+  const out=[];
+  for(let j=0;j<per;j++){ const k=start+j; if(k<nb) out.push(base+k); }
+  return out;
+}
+const hFmt=i=>`${P.meta.chroms[hChrom[i]]}:${hStart[i]}–${hStart[i]+P.heatmap.bin_mb} Mb`;
+const hCls=i=>{ if(!hCensat) return "";
+  const c=CEN[hCensat[i]]; return c==="non_sat"? "" : ` · <b>${c}</b>`; };
 const hImg=new Image();
 hImg.onload=()=>{
   const oc=document.createElement("canvas"); oc.width=hn; oc.height=hn;
@@ -808,43 +841,111 @@ hImg.onload=()=>{
 hImg.src="data:image/png;base64,"+P.heatmap.png;
 function orderIdx(){ if (hOrder==="genome"){ const a=new Int32Array(hn); for(let i=0;i<hn;i++)a[i]=i; return a; }
   return Int32Array.from(hLeaf); }
-let hDisp=1, hOrd=null;
-function drawHeat(){
+let hOrd=null;
+function renderHeatBase(){
   if(!HM) return;
+  hLastR=performance.now();
   const r=heat.getBoundingClientRect();
-  const side=Math.min(Math.round(r.width), 760);
-  heat.width=side*dpr; heat.height=side*dpr; heat.style.height=side+"px";
-  hDisp=side; hOrd=orderIdx();
-  const img=hctx.createImageData(side,side);
+  const side=Math.min(Math.round(r.width)||760, 760);
+  hSide=side; hArea=side-MGL;
+  const hgt=hArea+MGT;
+  heat.width=side*dpr; heat.height=hgt*dpr; heat.style.height=hgt+"px";
+  hOrd=orderIdx();
+  hPos=new Int32Array(hn); for(let i=0;i<hn;i++) hPos[hOrd[i]]=i;
+  hClamp();
   const dk=isDark();
   const [lr,lg,lb]=hexRgb(dk? "#101417":"#f4f2ec"), [hr,hg,hb]=hexRgb(dk? "#9ecfff":"#123c78");
-  const scale=hn/side;
-  for(let yy=0;yy<side;yy++){
-    const y0=Math.floor(yy*scale), y1=Math.max(y0+1,Math.floor((yy+1)*scale));
-    for(let xx=0;xx<side;xx++){
-      const x0=Math.floor(xx*scale), x1=Math.max(x0+1,Math.floor((xx+1)*scale));
+  const img=new ImageData(hArea,hArea);
+  const sc=hv.span/hArea;
+  for(let yy=0;yy<hArea;yy++){
+    const y0=Math.floor(hv.r0+yy*sc), y1=Math.max(y0+1,Math.floor(hv.r0+(yy+1)*sc));
+    for(let xx=0;xx<hArea;xx++){
+      const x0=Math.floor(hv.c0+xx*sc), x1=Math.max(x0+1,Math.floor(hv.c0+(xx+1)*sc));
       let v=0;
-      for(let y=y0;y<y1;y++){ const ry=hOrd[y]*hn;
-        for(let x=x0;x<x1;x++){ const q=HM[ry+hOrd[x]]; if(q>v)v=q; } }
-      const t=v/255, o=(yy*side+xx)*4;
+      for(let y=y0;y<y1&&y<hn;y++){ const ry=hOrd[y]*hn;
+        for(let x=x0;x<x1&&x<hn;x++){ const q=HM[ry+hOrd[x]]; if(q>v)v=q; } }
+      const t=v/255, o=(yy*hArea+xx)*4;
       img.data[o]  =Math.round(lerp(lr,hr,t));
       img.data[o+1]=Math.round(lerp(lg,hg,t));
       img.data[o+2]=Math.round(lerp(lb,hb,t));
       img.data[o+3]=255;
     }
   }
-  const oc=document.createElement("canvas"); oc.width=side; oc.height=side;
-  oc.getContext("2d").putImageData(img,0,0);
-  hctx.setTransform(dpr,0,0,dpr,0,0);
-  hctx.clearRect(0,0,side,side);
-  hctx.drawImage(oc,0,0);
+  hBase=document.createElement("canvas"); hBase.width=side*dpr; hBase.height=hgt*dpr;
+  const c=hBase.getContext("2d"); c.setTransform(dpr,0,0,dpr,0,0);
+  const mm=document.createElement("canvas"); mm.width=hArea; mm.height=hArea;
+  mm.getContext("2d").putImageData(img,0,0);
+  c.drawImage(mm, MGL, MGT);
+  // annotation strips: chromosome then satellite class, both axes
+  const stripCol=(i,which)=> which===0 ? chromColor[hChrom[i]]
+    : (hCensat ? (CEN[hCensat[i]]==="non_sat"? css("--noise") : (cenColor[CEN[hCensat[i]]]||css("--noise"))) : css("--noise"));
+  for(let xx=0;xx<hArea;xx++){
+    const i=hOrd[Math.min(hn-1,Math.floor(hv.c0+(xx+0.5)*sc))];
+    c.fillStyle=stripCol(i,0); c.fillRect(MGL+xx, 0, 1, 9);
+    c.fillStyle=stripCol(i,1); c.fillRect(MGL+xx, 11, 1, 9);
+  }
+  for(let yy=0;yy<hArea;yy++){
+    const i=hOrd[Math.min(hn-1,Math.floor(hv.r0+(yy+0.5)*sc))];
+    c.fillStyle=stripCol(i,0); c.fillRect(0, MGT+yy, 9, 1);
+    c.fillStyle=stripCol(i,1); c.fillRect(11, MGT+yy, 9, 1);
+  }
+  // chromosome labels + hairlines in genome order
   if (hOrder==="genome"){
-    hctx.strokeStyle=css("--paper"); hctx.lineWidth=0.75; hctx.globalAlpha=0.9;
-    for(let i=1;i<hn;i++){ if(hChrom[i]!==hChrom[i-1]){ const p=i/hn*side;
-      hctx.beginPath(); hctx.moveTo(p,0); hctx.lineTo(p,side); hctx.stroke();
-      hctx.beginPath(); hctx.moveTo(0,p); hctx.lineTo(side,p); hctx.stroke(); } }
+    c.font="9.5px 'IBM Plex Mono',monospace"; c.textAlign="center"; c.fillStyle=css("--muted");
+    let run0=0;
+    for(let xx=1;xx<=hArea;xx++){
+      const i0=Math.floor(hv.c0+(xx-0.5)*sc), iP=Math.floor(hv.c0+(run0+0.5)*sc);
+      if(xx===hArea || hChrom[Math.min(hn-1,i0)]!==hChrom[Math.min(hn-1,iP)]){
+        if(xx-run0>=20) c.fillText(P.meta.chroms[hChrom[Math.min(hn-1,iP)]].replace("chr",""),
+          MGL+(run0+xx)/2, 31);
+        run0=xx;
+      }
+    }
+    c.strokeStyle=css("--paper"); c.lineWidth=0.75; c.globalAlpha=0.9;
+    for(let i=1;i<hn;i++){ if(hChrom[i]!==hChrom[i-1]){
+      if(i>hv.c0 && i<hv.c0+hv.span){ const p=MGL+(i-hv.c0)/hv.span*hArea;
+        c.beginPath(); c.moveTo(p,MGT); c.lineTo(p,MGT+hArea); c.stroke(); }
+      if(i>hv.r0 && i<hv.r0+hv.span){ const p=MGT+(i-hv.r0)/hv.span*hArea;
+        c.beginPath(); c.moveTo(MGL,p); c.lineTo(MGL+hArea,p); c.stroke(); } } }
+    c.globalAlpha=1;
+  }
+  // colorbar (cbrt scale with reference ticks)
+  const bar=document.getElementById("heatbar");
+  if(bar){ const bc=bar.getContext("2d");
+    for(let x=0;x<bar.width;x++){ const t=x/(bar.width-1);
+      bc.fillStyle=`rgb(${Math.round(lerp(lr,hr,t))},${Math.round(lerp(lg,hg,t))},${Math.round(lerp(lb,hb,t))})`;
+      bc.fillRect(x,0,1,bar.height); }
+    bc.fillStyle=css("--ink");
+    for(const j of [0.01,0.1,0.5]){ const x=Math.round(Math.cbrt(j)*(bar.width-1));
+      bc.fillRect(x,0,1,3); bc.fillRect(x,bar.height-3,1,3); }
+  }
+}
+function drawHeatFrame(){
+  if(!hBase) return;
+  if(!sel) hPair=null;
+  hctx.setTransform(1,0,0,1,0,0);
+  hctx.clearRect(0,0,heat.width,heat.height);
+  hctx.drawImage(hBase,0,0);
+  hctx.setTransform(dpr,0,0,dpr,0,0);
+  const mark=(a,b,strong)=>{
+    const ry=(hPos[a]-hv.r0)/hv.span*hArea, cx=(hPos[b]-hv.c0)/hv.span*hArea;
+    if(ry<0||ry>hArea||cx<0||cx>hArea) return;
+    hctx.strokeStyle=css("--ring"); hctx.lineWidth=strong?1.8:1.2;
+    hctx.beginPath(); hctx.arc(MGL+cx, MGT+ry, strong?7:5, 0, 7); hctx.stroke();
+  };
+  if (hPair){ mark(hPair.a, hPair.b, true); mark(hPair.b, hPair.a, false); }
+  if (hCursor){
+    hctx.strokeStyle=css("--ring"); hctx.lineWidth=0.8; hctx.globalAlpha=0.45;
+    hctx.beginPath(); hctx.moveTo(MGL, hCursor.y); hctx.lineTo(MGL+hArea, hCursor.y); hctx.stroke();
+    hctx.beginPath(); hctx.moveTo(hCursor.x, MGT); hctx.lineTo(hCursor.x, MGT+hArea); hctx.stroke();
     hctx.globalAlpha=1;
   }
+}
+function drawHeat(){ renderHeatBase(); drawHeatFrame(); }
+function requestHeatRender(){
+  const now=performance.now();
+  if(now-hLastR>45){ drawHeat(); }
+  else if(!hRAF){ hRAF=requestAnimationFrame(()=>{ hRAF=0; drawHeat(); }); }
 }
 document.querySelectorAll("#heatorder button").forEach(b=> b.onclick=()=>{
   hOrder=b.dataset.o;
@@ -852,20 +953,88 @@ document.querySelectorAll("#heatorder button").forEach(b=> b.onclick=()=>{
     x.setAttribute("aria-pressed", x.dataset.o===hOrder));
   drawHeat();
 });
+function hAt(e){
+  const r=heat.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const col=Math.floor(hv.c0+(mx-MGL)/hArea*hv.span);
+  const row=Math.floor(hv.r0+(my-MGT)/hArea*hv.span);
+  const inM=mx>=MGL&&my>=MGT&&col>=0&&row>=0&&col<hn&&row<hn
+    &&col<hv.c0+hv.span&&row<hv.r0+hv.span;
+  return {mx,my,row,col,inM, a:inM?hOrd[row]:-1, b:inM?hOrd[col]:-1};
+}
+function hJacc(a,b){ const t=HM[a*hn+b]/255, v=t*t*t;  // undo the cbrt stretch
+  return v<0.01? v.toPrecision(2) : v.toFixed(3); }
+function hHoverReadout(a,b){
+  document.getElementById("heatreadout").innerHTML =
+    `<b>${hFmt(a)}</b>${hCls(a)}<br><b>${hFmt(b)}</b>${hCls(b)}<br>` +
+    `exact Jaccard ≈ <b>${hJacc(a,b)}</b>` +
+    (hClust[a]>=0&&hClust[a]===hClust[b]? " · same pairwise cluster":"");
+}
+function hPairSelect(a,b){
+  hPair={a,b};
+  const kids=[...new Set([...hChildren(a), ...hChildren(b)])];
+  const mask=new Uint8Array(N); kids.forEach(i=>mask[i]=1);
+  toggleSel({type:"bins", mask, n:kids.length});
+  document.getElementById("heatreadout").innerHTML =
+    `<b>${hFmt(a)}</b>${hCls(a)}<br><b>${hFmt(b)}</b>${hCls(b)}<br>` +
+    `exact Jaccard ≈ <b>${hJacc(a,b)}</b>` +
+    (hClust[a]>=0&&hClust[a]===hClust[b]? " · same pairwise cluster":"") +
+    `<br><span style="color:var(--muted)">both loci highlighted on the map and territory — esc releases</span>`;
+  drawHeatFrame();
+}
+heat.addEventListener("pointerdown", e=>{
+  try{ heat.setPointerCapture(e.pointerId); }catch(_){}
+  hDrag={x:e.clientX, y:e.clientY, moved:false};
+});
 heat.addEventListener("pointermove", e=>{
   if(!HM||!hOrd) return;
-  const r=heat.getBoundingClientRect();
-  const xx=Math.floor((e.clientX-r.left)/hDisp*hn), yy=Math.floor((e.clientY-r.top)/hDisp*hn);
-  if(xx<0||yy<0||xx>=hn||yy>=hn) return;
-  const a=hOrd[yy], b=hOrd[xx];
-  const t=HM[a*hn+b]/255, v=t*t*t;  // undo the cbrt display stretch
-  const f=i=>`${P.meta.chroms[hChrom[i]]}:${hStart[i]}–${hStart[i]+P.heatmap.bin_mb} Mb`;
-  document.getElementById("heatreadout").innerHTML =
-    `<b>${f(a)}</b> × <b>${f(b)}</b><br>exact Jaccard ≈ <b>${v<0.01? v.toPrecision(2): v.toFixed(3)}</b>` +
-    (hClust[a]>=0&&hClust[a]===hClust[b]? " · same pairwise cluster":"");
+  if(hDrag){
+    const dx=e.clientX-hDrag.x, dy=e.clientY-hDrag.y;
+    if(Math.hypot(dx,dy)>3) hDrag.moved=true;
+    if(hDrag.moved && hv.span<hn){
+      hv.c0-=dx/hArea*hv.span; hv.r0-=dy/hArea*hv.span; hClamp();
+      requestHeatRender();
+    }
+    hDrag.x=e.clientX; hDrag.y=e.clientY;
+    return;
+  }
+  const p=hAt(e);
+  if(p.inM){ hCursor={x:p.mx,y:p.my}; drawHeatFrame(); hHoverReadout(p.a,p.b); }
+  else if(p.col>=0&&p.col<hn&&p.my<MGT&&p.mx>=MGL){
+    hCursor=null; drawHeatFrame();
+    const i=hOrd[Math.min(hn-1,Math.max(0,p.col))];
+    document.getElementById("heatreadout").innerHTML=`<b>${hFmt(i)}</b>${hCls(i)}`;
+  }
 });
+const hEnd=e=>{
+  if(hDrag && !hDrag.moved){
+    const p=hAt(e);
+    if(p.inM) hPairSelect(p.a,p.b);
+  }
+  hDrag=null;
+};
+heat.addEventListener("pointerup", hEnd);
+heat.addEventListener("pointercancel", ()=>{ hDrag=null; });
 heat.addEventListener("pointerleave", ()=>{
-  document.getElementById("heatreadout").innerHTML="hover the matrix…"; });
+  hCursor=null; if(hBase) drawHeatFrame();
+  if(!hPair) document.getElementById("heatreadout").innerHTML="hover the matrix…"; });
+function hZoomAt(mx,my,f){
+  const span2=Math.max(16, Math.min(hn, hv.span*f));
+  const ra=hv.r0+(my-MGT)/hArea*hv.span, ca=hv.c0+(mx-MGL)/hArea*hv.span;
+  hv.r0=ra-(my-MGT)/hArea*span2; hv.c0=ca-(mx-MGL)/hArea*span2; hv.span=span2;
+  hClamp(); requestHeatRender();
+}
+heat.addEventListener("wheel", e=>{
+  if(!e.ctrlKey && hv.span===hn) return;
+  e.preventDefault();
+  const r=heat.getBoundingClientRect();
+  if(e.ctrlKey) hZoomAt(e.clientX-r.left, e.clientY-r.top, Math.exp(e.deltaY*0.01));
+  else { hv.c0+=e.deltaX/hArea*hv.span; hv.r0+=e.deltaY/hArea*hv.span; hClamp(); requestHeatRender(); }
+}, {passive:false});
+heat.addEventListener("dblclick", ()=>{ hv={r0:0,c0:0,span:hn}; drawHeat(); });
+document.getElementById("ht-in").onclick=()=> hZoomAt(MGL+hArea/2, MGT+hArea/2, 1/1.6);
+document.getElementById("ht-out").onclick=()=> hZoomAt(MGL+hArea/2, MGT+hArea/2, 1.6);
+document.getElementById("ht-reset").onclick=()=>{ hv={r0:0,c0:0,span:hn}; drawHeat(); };
 
 /* ---------- robustness figures ---------- */
 const FIGCAP = {

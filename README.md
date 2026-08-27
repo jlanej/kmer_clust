@@ -101,6 +101,10 @@ results in `out/`, the site in `docs/`.
   satellite hemisphere.
 - Track A (cosine in the SVD model) and Track B (exact Jaccard at 1 Mb) rank
   pairs the same way — measured, not assumed.
+- The exact-distance matrix is explorable: annotation margins (chromosome +
+  satellite class), zoom/pan to single-pair resolution, and click-a-pair to
+  light both loci up on the map and territory (e.g. one click on an
+  off-diagonal speck reads: chr13 rDNA × chr21 rDNA, Jaccard 0.256).
 
 Headline numbers from the shipped run (full details in `out/metrics.json` and
 on the atlas page):

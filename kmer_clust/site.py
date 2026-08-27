@@ -198,9 +198,21 @@ def build_payload(params: Params) -> dict:
     buf = io.BytesIO()
     Image.fromarray(q, mode="L").save(buf, format="PNG", optimize=True)
     p_chrom_idx = np.array([chroms.index(c) for c in parents["chrom"]], np.uint8)
+    # dominant satellite class per 1 Mb bin (mean of children's coverage)
+    classes_nc = [c for c in CENSAT_CLASSES if c != "ct"]
+    parent_id = pd.factorize(
+        pd.Series(list(zip(bins["chrom"], bins["start"] // params.pairwise_bin_bp)))
+    )[0]
+    cov_par = annot[[f"cov_{c}" for c in classes_nc]].groupby(parent_id).mean().to_numpy()
+    p_censat = np.full(len(parents), cen_map["non_sat"], np.uint8)
+    best, bestv = cov_par.argmax(axis=1), cov_par.max(axis=1)
+    hit = bestv >= 0.3
+    p_censat[hit] = [cen_map[classes_nc[i]] for i in best[hit]]
+
     payload["heatmap"] = {
         "png": base64.b64encode(buf.getvalue()).decode(),
         "n": len(parents),
+        "censat": b64(p_censat),
         "encoding": "cbrt-jaccard",
         "leaf_order": b64(pw["leaf_order"].astype(np.int16)),
         "chrom": b64(p_chrom_idx),
