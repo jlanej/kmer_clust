@@ -57,6 +57,11 @@ h2{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:26px;margin:64
 .ghost{border:1px solid var(--hair2);background:transparent;color:var(--ink2);
   font:12.5px/1 "IBM Plex Sans",sans-serif;padding:8px 12px;border-radius:9px;cursor:pointer}
 .ghost:hover{color:var(--ink);border-color:var(--muted)}
+select.selctl{border:1px solid var(--hair2);background:var(--card);color:var(--ink2);
+  font:12.5px "IBM Plex Sans",sans-serif;padding:7px 9px;border-radius:9px;cursor:pointer;
+  max-width:300px}
+select.selctl:hover{color:var(--ink);border-color:var(--muted)}
+select.selctl:focus-visible{outline:2px solid var(--ring)}
 button:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .legend{display:flex;flex-wrap:wrap;gap:6px 10px;margin:2px 0 12px;min-height:22px}
 .lchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink2);
@@ -162,7 +167,9 @@ footer a{color:var(--ink2)}
 <h2>Map ↔ territory</h2>
 <p class="lede">The map is the UMAP plane; the territory is the genome in its own coordinates.
 Hover either side and the other answers. Click a dot, a stripe, a legend chip, or a table row to
-isolate one cluster. Pinch or double-click to zoom the map, drag to pan, and shift-drag (or the
+isolate one cluster — legend chips and rows <b>toggle</b>, and shift-clicking dots adds their
+cluster, so several selections can glow at once. Pinch or double-click to zoom the map, drag to
+pan, and shift-drag (or the
 ⬚&nbsp;select tool) to box a region — the territory and a region report answer. Sweep the
 <b>k</b> slider to change the vocabulary itself: every stop is a full re-sketch of the genome at
 that word length, layouts Procrustes-aligned so the morph shows structure, not spin. Press
@@ -420,7 +427,7 @@ document.addEventListener("DOMContentLoaded", () => {
     else setHover(-1);
   });
   const endDrag = e => {
-    if (drag && !drag.moved && hover3d >= 0) tapSelect(hover3d);
+    if (drag && !drag.moved && hover3d >= 0) tapSelect(hover3d, e.shiftKey);
     drag = null;
   };
   cv.addEventListener("pointerup", endDrag);
@@ -511,6 +518,10 @@ would fail the first.</p>
 
 <h2>The clusters</h2>
 <p class="lede" id="cluster-lede"></p>
+<div class="controls">
+  <select id="tbl-jump" class="selctl" title="the full suite of clusters, largest first — picking one toggles it into the selection (pick several to compare)"></select>
+  <button class="ghost" id="tbl-toggle" title="expand the table to every cluster, or collapse back to the prevalent ones"></button>
+</div>
 <div class="tablewrap"><table id="ctable"></table></div>
 
 <h2>Method</h2>
@@ -642,8 +653,10 @@ function pointColor(i){
 function inSel(i){
   if (!sel) return true;
   if (sel.type==="bins") return !!sel.mask[i];
-  if (sel.type==="cluster") return cluster[i]===sel.id;
-  return CEN[censat[i]]===sel.id;
+  if (sel.type==="cluster") return sel.ids.has(cluster[i]);
+  if (sel.type==="chrom") return sel.ids.has(chrom[i]);
+  if (sel.type==="acro") return !!(A.acro && sel.ids.has(A.acro[i]));
+  return sel.ids.has(CEN[censat[i]]);
 }
 
 /* ---------- scatter ---------- */
@@ -875,17 +888,25 @@ function bindHover(cv, hit){
     const r=cv.getBoundingClientRect();
     const i=hit(e.clientX-r.left, e.clientY-r.top);
     if(i<0) return;
-    if (mode==="censat"){ const cls=CEN[censat[i]];
-      toggleSel(cls==="non_sat"? null : {type:"censat", id:cls}); }
-    else { const c=cluster[i]; toggleSel(c<0? null : {type:"cluster", id:c}); }
+    tapSelect(i, e.shiftKey);
   });
 }
 function toggleSel(s){
-  if (s && sel && s.type!=="bins" && sel.type===s.type && sel.id===s.id) s=null;
   sel = s;
   document.getElementById("clearsel").hidden = !sel;
   invalidate();
   drawMap(); drawRibbon(); drawCard(); syncLegend(); syncTable();
+}
+function toggleIdSel(type, id, additive){
+  if (sel && sel.type===type && sel.ids){
+    const ids=new Set(sel.ids);
+    if (additive){ ids.has(id)? ids.delete(id) : ids.add(id); }
+    else if (ids.size===1 && ids.has(id)){ toggleSel(null); return; }
+    else { ids.clear(); ids.add(id); }
+    toggleSel(ids.size? {type, ids} : null);
+  } else {
+    toggleSel({type, ids:new Set([id])});
+  }
 }
 document.getElementById("clearsel").onclick = ()=> toggleSel(null);
 addEventListener("keydown", e=>{ if(e.key==="Escape") toggleSel(null); });
@@ -923,20 +944,52 @@ function drawCard(){
       </div>`;
     return;
   }
-  if (!sel || sel.type!=="cluster" || !clTable[sel.id]){ el.style.display="none"; return; }
-  const r=clTable[sel.id];
+  if (!sel){ el.style.display="none"; return; }
+  if (sel.type==="cluster" && sel.ids.size===1){
+    const id=[...sel.ids][0], r=clTable[id];
+    if (!r){ el.style.display="none"; return; }
+    el.style.display="block";
+    el.innerHTML = `<div class="name"><span class="sw" style="background:${clColor[r.cluster]}"></span>
+        cluster ${r.cluster} · ${r.name}</div>
+      <div class="facts">
+        <span><b>${r.n_bins.toLocaleString()}</b> bins</span>
+        <span><b>${r.mb.toLocaleString()}</b> Mb</span>
+        <span>dominant class <b>${r.dom_class}</b> (${Math.round(r.dom_class_frac*100)}%)</span>
+        <span>spread <b>${r.n_chroms}</b> chromosome${r.n_chroms>1?"s":""}${r.dom_chrom_frac>=0.8?" — mostly <b>"+r.dom_chrom+"</b>":""}</span>
+        <span>GC <b>${Math.round(r.gc*100)}%</b></span>
+        <span>segdup <b>${Math.round(r.sd_frac*100)}%</b></span>
+        <span>private vocab <b>${Math.round(r.private_frac*100)}%</b></span>
+      </div>`;
+    return;
+  }
+  // multi-selection summary (clusters, classes, chromosomes, or p-arms)
+  const counts=new Map(); let n=0;
+  for(let i=0;i<N;i++){
+    if(!inSel(i)) continue;
+    n++;
+    let key;
+    if (sel.type==="cluster") key=cluster[i];
+    else if (sel.type==="censat") key=CEN[censat[i]];
+    else if (sel.type==="chrom") key=chrom[i];
+    else key=A.acro[i];
+    counts.set(key,(counts.get(key)||0)+1);
+  }
+  const kinds={cluster:["cluster","clusters"], censat:["class","classes"],
+    chrom:["chromosome","chromosomes"], acro:["p-arm","p-arms"]}[sel.type];
+  const swName=key=>{
+    if (sel.type==="cluster") return [clColor[key]||"#999", key+" · "+(clTable[key]?.name||"cluster "+key)];
+    if (sel.type==="censat") return [cenColor[key]||css("--noise"), key];
+    if (sel.type==="chrom") return [chromColor[key], P.meta.chroms[key]];
+    return [ACRO_COLORS[key-1]||"#999", ((P.meta.acros||[])[key-1]||"").replace("chr","")+"p"];
+  };
+  const members=[...counts.entries()].sort((a,b)=>b[1]-a[1]).map(([k,c])=>{
+    const [col,name]=swName(k);
+    return `<span><span class="sw" style="background:${col};display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px"></span><b>${name}</b> (${c.toLocaleString()})</span>`;
+  }).join("");
   el.style.display="block";
-  el.innerHTML = `<div class="name"><span class="sw" style="background:${clColor[r.cluster]}"></span>
-      cluster ${r.cluster} · ${r.name}</div>
-    <div class="facts">
-      <span><b>${r.n_bins.toLocaleString()}</b> bins</span>
-      <span><b>${r.mb.toLocaleString()}</b> Mb</span>
-      <span>dominant class <b>${r.dom_class}</b> (${Math.round(r.dom_class_frac*100)}%)</span>
-      <span>spread <b>${r.n_chroms}</b> chromosome${r.n_chroms>1?"s":""}${r.dom_chrom_frac>=0.8?" — mostly <b>"+r.dom_chrom+"</b>":""}</span>
-      <span>GC <b>${Math.round(r.gc*100)}%</b></span>
-      <span>segdup <b>${Math.round(r.sd_frac*100)}%</b></span>
-      <span>private vocab <b>${Math.round(r.private_frac*100)}%</b></span>
-    </div>`;
+  el.innerHTML=`<div class="name">selection · ${counts.size} ${kinds[counts.size>1?1:0]} ·
+      ${n.toLocaleString()} bins · ~${(n*P.meta.bin_bp/1e6).toFixed(1)} Mb</div>
+    <div class="facts">${members}</div>`;
 }
 
 /* ---------- legend + modes ---------- */
@@ -948,8 +1001,6 @@ for (const m of MODES){
   b.setAttribute("aria-pressed", m.id===mode);
   b.onclick=()=>{ mode=m.id;
     for(const x of modesEl.children) x.setAttribute("aria-pressed", x.dataset.m===mode);
-    if (sel && sel.type!=="bins" && ((mode==="censat")!==(sel.type==="censat"))) sel=null;
-    document.getElementById("clearsel").hidden=!sel;
     invalidate();
     drawMap(); drawRibbon(); buildLegend(); };
   modesEl.appendChild(b);
@@ -967,26 +1018,26 @@ function buildLegend(){
     const eu=bySize.filter(r=>r.dom_class==="non_sat").slice(0,7);
     const rows=[...eu,...sat];
     for (const r of rows) el.appendChild(chip(clColor[r.cluster], r.cluster+" · "+r.name,
-      sel&&sel.type==="cluster"&&sel.id===r.cluster,
-      ()=>toggleSel({type:"cluster",id:r.cluster})));
+      sel&&sel.type==="cluster"&&sel.ids.has(r.cluster),
+      ()=>toggleIdSel("cluster", r.cluster, true)));
     el.appendChild(chip(css("--noise"),"noise",false,()=>{}));
   } else if (mode==="censat"){
     for (const c of CEN){ if(c==="non_sat") continue;
       if (!(c in cenColor)) continue;
-      el.appendChild(chip(cenColor[c], c, sel&&sel.type==="censat"&&sel.id===c,
-        ()=>toggleSel({type:"censat",id:c}))); }
+      el.appendChild(chip(cenColor[c], c, sel&&sel.type==="censat"&&sel.ids.has(c),
+        ()=>toggleIdSel("censat", c, true))); }
     el.appendChild(chip(css("--noise"),"non-satellite",false,()=>{}));
   } else if (mode==="chrom"){
-    P.meta.chroms.forEach((c,i)=> el.appendChild(chip(chromColor[i],c.replace("chr",""),false,()=>{})));
+    P.meta.chroms.forEach((c,i)=> el.appendChild(chip(chromColor[i],c.replace("chr",""),
+      sel&&sel.type==="chrom"&&sel.ids.has(i),
+      ()=>toggleIdSel("chrom", i, true))));
   } else if (mode==="acro"){
-    const selectAcro = pred => { const mask=new Uint8Array(N); let k=0;
-      for(let i=0;i<N;i++) if(pred(i)){ mask[i]=1; k++; }
-      if(k) toggleSel({type:"bins", mask, n:k}); };
     (P.meta.acros||[]).forEach((c,ci)=> el.appendChild(chip(
-      ACRO_COLORS[ci], c.replace("chr","")+"p", false,
-      ()=>selectAcro(i=>A.acro[i]===ci+1))));
+      ACRO_COLORS[ci], c.replace("chr","")+"p",
+      sel&&sel.type==="acro"&&sel.ids.has(ci+1),
+      ()=>toggleIdSel("acro", ci+1, true))));
     el.appendChild(chip(css("--ink2"), "all p-arms", false,
-      ()=>selectAcro(i=>A.acro[i]>0)));
+      ()=>toggleSel({type:"acro", ids:new Set((P.meta.acros||[]).map((_,i)=>i+1))})));
     const note=document.createElement("span");
     note.className="lchip"; note.style.cursor="default";
     note.textContent="saturated = knows its chromosome · washed out = pan-acrocentric commons";
@@ -1036,13 +1087,20 @@ let sortKey="n_bins", sortDir=-1;
 const COLS=[["cluster","#"],["name","name"],["n_bins","bins"],["mb","Mb"],
   ["dom_class","dominant class"],["dom_class_frac","purity"],
   ["n_chroms","chroms"],["gc","GC"],["sd_frac","segdup"],["private_frac","private"]];
+let tableAll=false;
+const TOP_N=15;
+const topIds=new Set([...P.clusters.table].sort((a,b)=>b.n_bins-a.n_bins)
+  .slice(0,TOP_N).map(r=>r.cluster));
 function drawTable(){
-  const rows=[...P.clusters.table].sort((a,b)=>{
-    const va=a[sortKey],vb=b[sortKey];
-    return (typeof va==="string"? va.localeCompare(vb) : va-vb)*sortDir; });
+  const selIds = (sel&&sel.type==="cluster")? sel.ids : new Set();
+  const rows=[...P.clusters.table]
+    .filter(r=> tableAll || topIds.has(r.cluster) || selIds.has(r.cluster))
+    .sort((a,b)=>{
+      const va=a[sortKey],vb=b[sortKey];
+      return (typeof va==="string"? va.localeCompare(vb) : va-vb)*sortDir; });
   tbl.innerHTML = "<thead><tr>"+COLS.map(([k,l])=>
     `<th data-k="${k}">${l}${k===sortKey?(sortDir<0?" ↓":" ↑"):""}</th>`).join("")+"</tr></thead>"+
-    "<tbody>"+rows.map(r=>`<tr data-c="${r.cluster}" class="${sel&&sel.type==='cluster'&&sel.id===r.cluster?'sel':''}">
+    "<tbody>"+rows.map(r=>`<tr data-c="${r.cluster}" class="${selIds.has(r.cluster)?'sel':''}">
       <td><span class="sw" style="background:${clColor[r.cluster]}"></span>${r.cluster}</td>
       <td style="color:var(--ink)">${r.name}</td>
       <td>${r.n_bins.toLocaleString()}</td><td>${r.mb.toLocaleString()}</td>
@@ -1055,12 +1113,28 @@ function drawTable(){
     if (k===sortKey) sortDir*=-1; else { sortKey=k; sortDir=-1; }
     drawTable(); });
   tbl.querySelectorAll("tbody tr").forEach(tr=> tr.onclick=()=>
-    toggleSel({type:"cluster", id:+tr.dataset.c}));
+    toggleIdSel("cluster", +tr.dataset.c, true));
+  const tb=document.getElementById("tbl-toggle");
+  tb.textContent = tableAll
+    ? `show the ${TOP_N} prevalent`
+    : `show all ${P.clusters.table.length} clusters`;
 }
 function syncTable(){ drawTable(); }
+document.getElementById("tbl-toggle").onclick=()=>{ tableAll=!tableAll; drawTable(); };
+{
+  const jump=document.getElementById("tbl-jump");
+  jump.append(new Option("select clusters…", ""));
+  [...P.clusters.table].sort((a,b)=>b.n_bins-a.n_bins).forEach(r=>
+    jump.append(new Option(`${r.cluster} · ${r.name} (${r.n_bins.toLocaleString()} bins)`, r.cluster)));
+  jump.onchange=()=>{
+    if (jump.value!==""){ toggleIdSel("cluster", +jump.value, true); jump.value=""; }
+  };
+}
 document.getElementById("cluster-lede").textContent =
-  `${P.clusters.table.length} clusters, named by their dominant annotation after the fact. ` +
-  `Sort by any column; click a row to light the cluster up in the map and the territory.`;
+  `${P.clusters.table.length} clusters, named by their dominant annotation after the fact — the ` +
+  `${TOP_N} most prevalent are listed; the selector reaches the rest. Click rows, legend chips, ` +
+  `or the selector to toggle several clusters at once (shift-click dots on the map does the same); ` +
+  `everything selected lights up together in the map, the territory, and the thread.`;
 
 /* ---------- heatmap ---------- */
 const heat=document.getElementById("heat"), hctx=heat.getContext("2d");
@@ -1332,11 +1406,14 @@ function applyBox(){
     if(sx>=lox&&sx<=hix&&sy>=loy&&sy<=hiy){ mask[i]=1; n++; } }
   if(n) toggleSel({type:"bins", mask, n});
 }
-function tapSelect(i){
+function tapSelect(i, additive){
   if(i<0){ return; }
   if (mode==="censat"){ const cls=CEN[censat[i]];
-    toggleSel(cls==="non_sat"? null : {type:"censat", id:cls}); }
-  else { const c=cluster[i]; toggleSel(c<0? null : {type:"cluster", id:c}); }
+    if (cls!=="non_sat") toggleIdSel("censat", cls, !!additive);
+    else if (!additive) toggleSel(null); }
+  else { const c=cluster[i];
+    if (c>=0) toggleIdSel("cluster", c, !!additive);
+    else if (!additive) toggleSel(null); }
 }
 function bindMapInteractions(){
   map.addEventListener("pointerdown", e=>{
@@ -1388,7 +1465,7 @@ function bindMapInteractions(){
       const d=drag;
       if (wasBox){ applyBox(); }
       drag=null;
-      if (wasTap) tapSelect(nearest(d.x0,d.y0));
+      if (wasTap) tapSelect(nearest(d.x0,d.y0), d.type==="box" || e.shiftKey);
       drawMap();
     }
   };

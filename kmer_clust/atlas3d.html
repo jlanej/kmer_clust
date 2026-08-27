@@ -218,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
     else setHover(-1);
   });
   const endDrag = e => {
-    if (drag && !drag.moved && hover3d >= 0) tapSelect(hover3d);
+    if (drag && !drag.moved && hover3d >= 0) tapSelect(hover3d, e.shiftKey);
     drag = null;
   };
   cv.addEventListener("pointerup", endDrag);
