@@ -113,6 +113,68 @@ def name_clusters(table, annot_cols):
     return names
 
 
+ACROS = ["chr13", "chr14", "chr15", "chr21", "chr22"]
+
+
+def acro_analysis(params: Params, bins, annot, Z) -> dict | None:
+    """Cross-acrocentric vocabulary mixing on the five p-arms.
+
+    For each p-arm bin: among its 15 nearest vocabulary neighbors that are
+    also acro-p bins (same-chromosome bins within +-5 bins of genomic
+    adjacency excluded, so an array cannot vote for itself), the fraction
+    from a DIFFERENT acrocentric. 0 = vocabulary knows its chromosome;
+    1 = pan-acrocentric commons. Also a neighbor-vote chromosome call.
+    """
+    chroms = bins["chrom"].to_numpy()
+    mask = np.isin(chroms, ACROS) & (annot["arm"].to_numpy() == "p")
+    idx = np.flatnonzero(mask)
+    if idx.size < 50:
+        return None
+    Zi = Z[idx].astype(np.float64)
+    Zi /= np.maximum(np.linalg.norm(Zi, axis=1, keepdims=True), 1e-9)
+    S = Zi @ Zi.T
+    chrom_i = chroms[idx]
+    pos_i = (bins["start"].to_numpy() // params.bin_bp)[idx]
+    same = chrom_i[:, None] == chrom_i[None, :]
+    adjacent = same & (np.abs(pos_i[:, None] - pos_i[None, :]) <= 5)
+    S[adjacent] = -2.0  # excludes self and own-array continuation
+    K = 15
+    top = np.argpartition(-S, K, axis=1)[:, :K]
+    neigh_chrom = chrom_i[top]
+    promisc = (neigh_chrom != chrom_i[:, None]).mean(axis=1)
+    votes = pd.DataFrame(neigh_chrom).mode(axis=1)[0].to_numpy()
+    acc = float((votes == chrom_i).mean())
+    conf = np.zeros((len(ACROS), len(ACROS)), np.int32)
+    a_ix = {c: i for i, c in enumerate(ACROS)}
+    for t, v in zip(chrom_i, votes):
+        conf[a_ix[t], a_ix[v]] += 1
+    censat = annot["censat_class"].replace("", "non_sat").to_numpy()[idx]
+    by_class = {
+        cls: round(float(promisc[censat == cls].mean()), 3)
+        for cls in pd.unique(censat)
+        if (censat == cls).sum() >= 10
+    }
+    out_df = pd.DataFrame({
+        "bin": idx, "chrom": chrom_i, "start": bins["start"].to_numpy()[idx],
+        "promiscuity": promisc.astype(np.float32),
+        "vote": votes, "vote_correct": votes == chrom_i,
+    })
+    out_df.to_parquet(OUT / "acro.parquet", index=False)
+    summary = {
+        "n_bins": int(idx.size),
+        "neighbor_vote_acc": round(acc, 4),
+        "mean_promiscuity": round(float(promisc.mean()), 4),
+        "promiscuity_by_class": by_class,
+        "confusion": conf.tolist(),
+        "chroms": ACROS,
+    }
+    with open(OUT / "acro.json", "w") as fh:
+        json.dump(summary, fh, indent=2)
+    print(f"acro: {idx.size} p-arm bins, vote acc {acc:.1%}, "
+          f"mean mixing {promisc.mean():.1%}")
+    return summary
+
+
 def run(params: Params) -> dict:
     t0 = time.time()
     bins = pd.read_parquet(OUT / "bins_embedded.parquet")
@@ -189,6 +251,10 @@ def run(params: Params) -> dict:
         metrics["sat_taxonomy_chance"] = round(
             float(pd.Series(censat[m2]).value_counts(normalize=True).max()), 4
         )
+
+    acro = acro_analysis(params, bins, annot, Z)
+    if acro:
+        metrics["acro"] = {k: v for k, v in acro.items() if k != "confusion"}
 
     print(f"agreement + classification done t={time.time()-t0:.0f}s")
 

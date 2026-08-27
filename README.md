@@ -143,6 +143,16 @@ Two additions keep the build annotation-agnostic while articulating the map:
   signal** (+14% dialect R², satellites improve); the k21⊕k17 concatenation
   gets both. The atlas ships the winners as morphable embedding views —
   satellite-health-gated, baseline always default.
+- **The acrocentric commons** (`analyze.acro_analysis`, atlas mode
+  "acro p-arms"): for every p-arm bin of chr13/14/15/21/22, the fraction of
+  its nearest vocabulary neighbors (own-array adjacency excluded) that come
+  from a *different* acrocentric. Mean cross-acro mixing is 57% and
+  neighbor-vote chromosome assignment only 48% — the assembly difficulty of
+  these arms, quantified bin by bin. The structure is uneven and specific:
+  non-satellite p-arm sequence is 88% interchangeable (the pseudo-homologous
+  region), hsat1B 92%, while hsat3 (35%) and rDNA (43%) retain identity;
+  13p and 15p carry large chromosome-knowing blocks while 14p/21p/22p are
+  mostly commons. The atlas colors arms by chromosome, desaturated by mixing.
 - **The k-ladder** (`kladder.py`): one full re-sketch and embedding per word
   length k ∈ {15,17,19,21,23,25}, each layout Procrustes-aligned to k=21 and
   quantized in a shared frame, so the atlas can expose **k as a slider** that

@@ -280,4 +280,64 @@ def run(params: Params) -> None:
     fig_ab_agreement()
     fig_seeds(bins, annot, pal_censat)
     fig_pairwise_heatmap()
+    fig_acro(params)
     print(f"figures -> {FIG_DIR}")
+
+
+def fig_acro(params: Params):
+    """Acro p-arms: map position + where along each arm identity survives."""
+    acro_path = OUT / "acro.parquet"
+    kl_path = OUT / "kladder.npz"
+    if not (acro_path.exists() and kl_path.exists()):
+        return
+    from .analyze import ACROS
+
+    bins = pd.read_parquet(OUT / "bins_embedded.parquet")
+    ac = pd.read_parquet(acro_path)
+    xy = np.load(kl_path)[f"k{params.k}"]
+    COLS = ["#2a78d6", "#eb6834", "#1baf7a", "#e87ba4", "#4a3aa7"]
+    GREY = np.array([201, 200, 194]) / 255
+    col = np.tile(np.array([232, 230, 223]) / 255 * 0.93, (len(bins), 1))
+    acro_map = np.zeros(len(bins), int)
+    prom = np.zeros(len(bins))
+    acro_map[ac["bin"]] = [ACROS.index(c) + 1 for c in ac["chrom"]]
+    prom[ac["bin"]] = ac["promiscuity"]
+    for ci, c in enumerate(COLS):
+        m = acro_map == ci + 1
+        base = np.array([int(c[j : j + 2], 16) for j in (1, 3, 5)]) / 255
+        t = (prom[m] * 0.85)[:, None]
+        col[m] = base[None, :] * (1 - t) + GREY[None, :] * t
+    fig = plt.figure(figsize=(11.5, 5.6), dpi=160, facecolor=SURFACE)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.15, 1], wspace=0.08)
+    ax = fig.add_subplot(gs[0])
+    ax.set_facecolor(SURFACE)
+    order = np.argsort(acro_map > 0)
+    ax.scatter(xy[order, 0], xy[order, 1], s=np.where(acro_map[order] > 0, 8, 1.1),
+               c=col[order], linewidths=0, rasterized=True)
+    ax.set_xticks([]); ax.set_yticks([])
+    for s_ in ax.spines.values():
+        s_.set_color(GRID)
+    ax.set_title("Acrocentric p-arms on the map — saturated = knows its chromosome,\n"
+                 "washed out = pan-acrocentric commons", color=INK, fontsize=10, loc="left")
+    axr = fig.add_subplot(gs[1])
+    axr.set_facecolor(SURFACE)
+    for ci, chrom in enumerate(ACROS):
+        g = ac[ac["chrom"] == chrom].sort_values("start")
+        y = len(ACROS) - ci
+        base = np.array([int(COLS[ci][j : j + 2], 16) for j in (1, 3, 5)]) / 255
+        for _, r in g.iterrows():
+            t = r["promiscuity"] * 0.85
+            axr.bar(r["start"] / 1e6, 0.7, width=0.1, bottom=y - 0.35,
+                    color=base * (1 - t) + GREY * t, align="edge", linewidth=0)
+        axr.text(-0.4, y, chrom.replace("chr", "") + "p", ha="right", va="center",
+                 fontsize=9, color=INK)
+    axr.set_ylim(0.4, len(ACROS) + 0.8)
+    axr.set_yticks([])
+    axr.set_xlabel("position on p-arm (Mb)", fontsize=8, color=MUTED)
+    for s_ in ("top", "right", "left"):
+        axr.spines[s_].set_visible(False)
+    axr.spines["bottom"].set_color(GRID)
+    axr.tick_params(colors=MUTED, labelsize=8)
+    axr.set_title("Where along each arm identity survives", color=INK, fontsize=10, loc="left")
+    fig.savefig(FIG_DIR / "acro_focus.png", facecolor=SURFACE, bbox_inches="tight")
+    plt.close(fig)

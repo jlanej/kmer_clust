@@ -104,6 +104,20 @@ def build_payload(params: Params) -> dict:
         )
         payload["arrays"]["pstrength"] = b64(u8(per["strength"]))
 
+    acro_path = OUT / "acro.parquet"
+    if acro_path.exists():
+        from .analyze import ACROS
+
+        ac = pd.read_parquet(acro_path)
+        acro_idx = np.zeros(len(bins), np.uint8)
+        apromisc = np.zeros(len(bins), np.uint8)
+        a_ix = {c: i + 1 for i, c in enumerate(ACROS)}
+        acro_idx[ac["bin"]] = [a_ix[c] for c in ac["chrom"]]
+        apromisc[ac["bin"]] = np.clip(ac["promiscuity"] * 255, 0, 255).astype(np.uint8)
+        payload["arrays"]["acro"] = b64(acro_idx)
+        payload["arrays"]["apromisc"] = b64(apromisc)
+        payload["meta"]["acros"] = ACROS
+
     # alternative embedding views: the k-ladder (Procrustes-aligned to k=21,
     # quantized in ONE shared frame so morphing shows structure, not scaling)
     # plus the dual-vocabulary view from the structure lab
