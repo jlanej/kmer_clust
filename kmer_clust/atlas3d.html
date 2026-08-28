@@ -245,9 +245,10 @@ document.addEventListener("DOMContentLoaded", () => {
     yaw = 0.55; pitch = 0.32; zoom = 1; panX = panY = 0;
   };
 
-  new IntersectionObserver(es => { visible = es[0].isIntersecting && !document.hidden; },
+  let ioVis = true;
+  new IntersectionObserver(es => { ioVis = es[0].isIntersecting; visible = ioVis && !document.hidden; },
     { rootMargin: "80px" }).observe(cv);
-  document.addEventListener("visibilitychange", () => { if (document.hidden) visible = false; });
+  document.addEventListener("visibilitychange", () => { visible = ioVis && !document.hidden; });
   addEventListener("resize", () => { clearTimeout(size._t); size._t = setTimeout(size, 150); });
   size();
   draw(performance.now());   // synchronous first frame (rAF pauses in hidden tabs)

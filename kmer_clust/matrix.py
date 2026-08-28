@@ -110,6 +110,11 @@ def gram_rsvd(X: sp.csr_matrix, dims: int, n_iter: int = 5, oversample: int = 24
 
 def run(params: Params, scaled: int | None = None, tag: str = "") -> dict:
     scaled = scaled or params.embed_scaled
+    if scaled < params.base_scaled:
+        raise ValueError(
+            f"embed scaled={scaled} is denser than the stored base "
+            f"scaled={params.base_scaled}; re-sketch with a smaller base_scaled"
+        )
     t0 = time.time()
     bins, indptr, hashes, counts = load_store(params)
     if scaled > params.base_scaled:
@@ -120,7 +125,7 @@ def run(params: Params, scaled: int | None = None, tag: str = "") -> dict:
         f"nnz={X.nnz/1e6:.1f}M (scaled={scaled}, t={time.time()-t0:.0f}s)"
     )
     Z, sigma = gram_rsvd(X, params.svd_dims, seed=params.seed)
-    out = OUT / f"svd{tag or ''}_s{scaled}.npz"
+    out = params.svd_npz(scaled)
     OUT.mkdir(exist_ok=True)
     np.savez_compressed(
         out, Z=Z, sigma=sigma, private_frac=private_frac.astype(np.float32),

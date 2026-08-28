@@ -61,7 +61,7 @@ class Kit:
         X, universe, df, _ = build_matrix(ip, h, c, params.min_df)
         self.universe = universe
         self.idf = np.log1p(X.shape[0] / df.astype(np.float64)).astype(np.float32)
-        z = np.load(OUT / f"svd_s{params.embed_scaled}.npz")
+        z = np.load(params.svd_npz())
         Z, sigma = z["Z"].astype(np.float64), z["sigma"].astype(np.float64)
         W = X.T.tocsr() @ (Z / np.maximum(sigma, 1e-9) ** 2)  # V = X^T Z Sigma^-2
         self.V = W.astype(np.float32)
@@ -124,33 +124,34 @@ class Kit:
 
 
 def loci_of(kit: Kit, hits, sims, gap_bins=3, max_loci=3):
-    """Merge genomically adjacent hits into loci, best-first."""
-    rows = kit.bins.iloc[hits]
-    used = np.zeros(len(hits), bool)
+    """Merge genomically adjacent hits into loci — transitively, so one
+    contiguous array forms ONE locus rather than fragments that would evict
+    genuinely different loci from the max_loci slots. Loci are ordered by
+    their best hit's score."""
+    rows = kit.bins.iloc[hits].reset_index(drop=True)
+    order = sorted(range(len(hits)),
+                   key=lambda m: (rows["chrom"][m], int(rows["start"][m])))
+    chains = [[order[0]]]
+    for m in order[1:]:
+        prev = chains[-1][-1]
+        if (rows["chrom"][m] == rows["chrom"][prev]
+                and rows["start"][m] - rows["start"][prev] <= gap_bins * kit.params.bin_bp):
+            chains[-1].append(m)
+        else:
+            chains.append([m])
     loci = []
-    for i in range(len(hits)):
-        if used[i]:
-            continue
-        c, s = rows.iloc[i]["chrom"], rows.iloc[i]["start"]
-        members = [i]
-        for j in range(i + 1, len(hits)):
-            if used[j]:
-                continue
-            if rows.iloc[j]["chrom"] == c and abs(rows.iloc[j]["start"] - s) <= gap_bins * kit.params.bin_bp:
-                members.append(j)
-                used[j] = True
-        used[i] = True
+    for members in chains:
+        best = max(sims[m] for m in members)
         loci.append({
-            "chrom": c,
-            "start_mb": round(float(rows.iloc[members]["start"].min() / 1e6), 1),
-            "end_mb": round(float((rows.iloc[members]["end"].max()) / 1e6), 1),
-            "sim": sims[i],
+            "chrom": rows["chrom"][members[0]],
+            "start_mb": round(float(min(rows["start"][m] for m in members) / 1e6), 1),
+            "end_mb": round(float(max(rows["end"][m] for m in members) / 1e6), 1),
+            "sim": best,
             "bins": [hits[m] for m in members],
             "bins_j": [[hits[m], sims[m]] for m in members],
         })
-        if len(loci) >= max_loci:
-            break
-    return loci
+    loci.sort(key=lambda l: -l["sim"])
+    return loci[:max_loci]
 
 
 def selftest(kit: Kit, n_easy=100, n_hard=60, offset=50_000, seed=7):

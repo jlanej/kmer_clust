@@ -40,9 +40,11 @@ KS = [15, 17, 19, 21, 23, 25]
 def l2rows(A):
     return A / np.maximum(np.linalg.norm(A, axis=1, keepdims=True), 1e-9)
 
+from kmer_clust.kladder import ensure_sketch
+
 blocks = {}
 for k in KS:
-    pk = Params(k=k)
+    pk = ensure_sketch(k)
     z = np.load(pk.sketch_npz)
     ip, h, c = downsample_store(z["indptr"], z["hashes"], z["counts"], p.embed_scaled)
     X, _, _, _ = build_matrix(ip, h, c, p.min_df)

@@ -177,6 +177,10 @@ def sketch_codes(codes: np.ndarray, k: int, scaled: int, n_segments: int = 40):
 
     Returns (positions uint32, hashes uint64), position-sorted.
     """
+    if not 4 <= k <= 31:
+        # 2-bit packing needs 2k+2 <= 64 shift-safe bits; k=32 would silently
+        # wrap the mask shift and sketch nothing
+        raise ValueError(f"k={k} unsupported: need 4 <= k <= 31")
     n = codes.shape[0]
     if n < k:
         return np.empty(0, np.uint32), np.empty(0, np.uint64)

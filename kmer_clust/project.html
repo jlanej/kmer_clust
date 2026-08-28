@@ -63,7 +63,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const selEl=document.getElementById("prj-set");
   PR.sets.forEach((s,i)=> selEl.append(new Option(s.label, i)));
-  selEl.onchange=()=>{ setIdx=+selEl.value; setPinIdx(-1); prep(); morph(stage,true); };
+  selEl.onchange=()=>{
+    if(anim){ cancelAnimationFrame(anim); anim=0; }
+    from=null; hover=-1; t=1;
+    setIdx=+selEl.value; setPinIdx(-1); prep(); morph(stage,true);
+  };
 
   const MX=26;
   const lineAY=30, yLoci=()=>H-104, yFine=()=>H-42, mapY0=64, mapH=()=>H-300;
@@ -155,7 +159,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function worldLine(i, alpha){
     const pts=STATIONS(i);
     ctx.strokeStyle=ACC; ctx.setLineDash([4,4]);
-    ctx.globalAlpha=alpha; ctx.lineWidth=alpha>0.5?1.4:1;
+    ctx.globalAlpha=alpha; ctx.lineWidth=alpha>0.5?1.6:1.2;
     ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
     for(let k=1;k<pts.length;k++)
       ctx.bezierCurveTo(pts[k-1][0],(pts[k-1][1]+pts[k][1])/2,
@@ -235,7 +239,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       // world-lines: all of them when toggled, else focus only
       if (showPaths) for(let i=0;i<QS.length;i++){
-        if(i!==pinned && i!==hover) worldLine(i, 0.13);
+        if(i!==pinned && i!==hover) worldLine(i, 0.22);
       }
       const focus=pinned>=0? pinned : hover;
       if (focus>=0) worldLine(focus, pinned>=0?0.7:0.45);
@@ -344,6 +348,10 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   addEventListener("resize", ()=>{ clearTimeout(size._t);
     size._t=setTimeout(()=>{ size(); prep(); draw(); },150); });
+  const rethemePrj=()=>{ ghost=null; draw(); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemePrj);
+  new MutationObserver(rethemePrj).observe(document.documentElement,
+    {attributes:true, attributeFilter:["data-theme"]});
   size(); prep(); draw();
   window.__prjDraw=draw; window.__prjMorph=morph; window.__prjPin=setPinIdx;
   window.__prjPaths=v=>{ showPaths=v; draw(); };

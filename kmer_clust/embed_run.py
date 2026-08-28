@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 
 from .config import OUT, Params
-from .sketch_run import load_store
 
 
 def umap_embed(Z, n_components, params: Params, min_dist=None, seed=None):
@@ -36,9 +35,9 @@ def cluster_hdbscan(Y, params: Params, min_cluster_size=None, min_samples=None):
 
 def run(params: Params) -> pd.DataFrame:
     t0 = time.time()
-    z = np.load(OUT / f"svd_s{params.embed_scaled}.npz")
+    z = np.load(params.svd_npz())
     Z = z["Z"]
-    bins, indptr, _, _ = load_store(params)
+    bins = pd.read_parquet(params.bins_parquet)  # the 1.7 GB store is not needed here
     print(f"umap: {Z.shape[0]} bins from {Z.shape[1]}-d SVD")
     xy = umap_embed(Z, 2, params)
     print(f"  2-d done t={time.time()-t0:.0f}s")

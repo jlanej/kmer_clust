@@ -439,12 +439,17 @@ const qx = new Uint16Array(A.qx.buffer), qy = new Uint16Array(A.qy.buffer);
 const periodArr = A.period ? new Uint16Array(A.period.buffer) : null;
 const cluster = new Int16Array(A.cluster.buffer);
 const chrom = A.chrom, censat = A.censat;
-const [X0,X1] = P.meta.x_range, [Y0,Y1] = P.meta.y_range;
 const chromOff = []; { let o=0; for (const nb of P.meta.chrom_nbins){ chromOff.push(o); o+=nb; } }
 const binMb = P.meta.bin_bp/1e6;
 
 /* ---------- palettes ---------- */
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const TH = {};   // theme-resolved colors, refreshed by layout() on theme change
+function refreshTheme(){
+  TH.noise = css("--noise"); TH.ring = css("--ring");
+  TH.muted = css("--muted"); TH.card = css("--card"); TH.ink2 = css("--ink2");
+}
+refreshTheme();
 const clColor = {}; for (const [k,v] of Object.entries(P.clusters.colors)) clColor[+k]=v;
 const cenColor = P.censat_colors;
 const CEN = P.meta.censat_classes;
@@ -489,29 +494,33 @@ let sel = null;            // {type:"cluster"|"censat", id}
 let hoverIdx = -1;
 function pointColor(i){
   switch(mode){
-    case "cluster": { const c=cluster[i]; return c<0 ? css("--noise") : (clColor[c]||"#999"); }
-    case "censat": { const cls=CEN[censat[i]]; return cls==="non_sat"? css("--noise") : (cenColor[cls]||css("--noise")); }
+    case "cluster": { const c=cluster[i]; return c<0 ? TH.noise : (clColor[c]||"#999"); }
+    case "censat": { const cls=CEN[censat[i]]; return cls==="non_sat"? TH.noise : (cenColor[cls]||TH.noise); }
     case "chrom": return chromColor[chrom[i]];
     case "gc": return ramp(A.gc[i]/255);
     case "private": return ramp(A.private[i]/255);
     case "sd": return ramp(A.sd[i]/255);
     case "pos": { const local=(i-chromOff[chrom[i]])/P.meta.chrom_nbins[chrom[i]]; return ramp(0.08+0.9*local); }
     case "period": {
-      if (!periodArr || A.pstrength[i] < 64) return css("--noise");
+      if (!periodArr || A.pstrength[i] < 64) return TH.noise;
       const t=(Math.log2(periodArr[i])-Math.log2(60))/(Math.log2(65500)-Math.log2(60));
       return ramp(Math.max(0.05,Math.min(1,t))); }
     case "acro": {
-      const a=A.acro[i]; if(!a) return css("--noise");
-      return mixToward(ACRO_COLORS[a-1], css("--noise"), A.apromisc[i]/255*0.85); }
+      const a=A.acro[i]; if(!a) return TH.noise;
+      return mixToward(ACRO_COLORS[a-1], TH.noise, A.apromisc[i]/255*0.85); }
   }
 }
+// sel shapes: {type:"cluster"|"censat"|"chrom"|"acro", ids:Set} or
+// {type:"bins", mask:Uint8Array, n}. Every new type needs its own branch here
+// AND in drawCard — there is deliberately no fallthrough.
 function inSel(i){
   if (!sel) return true;
   if (sel.type==="bins") return !!sel.mask[i];
   if (sel.type==="cluster") return sel.ids.has(cluster[i]);
   if (sel.type==="chrom") return sel.ids.has(chrom[i]);
   if (sel.type==="acro") return !!(A.acro && sel.ids.has(A.acro[i]));
-  return sel.ids.has(CEN[censat[i]]);
+  if (sel.type==="censat") return sel.ids.has(CEN[censat[i]]);
+  return true;
 }
 
 /* ---------- scatter ---------- */
@@ -607,7 +616,7 @@ function renderMapBase(){
   const r = 1.35*knSize*Math.min(Math.pow(vs,0.4), 2.6);
   c.globalAlpha = knAlpha;
   if (sel){ // ghost color, not alpha: overlapping translucent points re-saturate
-    c.fillStyle = css("--noise");
+    c.fillStyle = TH.noise;
     for(let i=0;i<N;i++){ if(inSel(i)) continue;
       c.fillRect(px(i)-r, py(i)-r, 2*r, 2*r); }
     for(let i=0;i<N;i++){ if(!inSel(i)) continue;
@@ -671,7 +680,7 @@ function renderRibBase(){
     c2.textAlign = "right";
     c2.fillText(P.meta.chroms[c].replace("chr",""), RLAB-7, y+ROWH*0.62);
     const wpb = (ribX(nb*binMb)-ribX(0))/nb;
-    const ghost = css("--noise");
+    const ghost = TH.noise;
     for(let b=0;b<nb;b++){
       const i = off+b;
       c2.fillStyle = (sel && !inSel(i)) ? ghost : pointColor(i);
@@ -780,6 +789,7 @@ function drawCard(){
       gcS+=25+A.gc[i]/255*40; pvS+=A.private[i]/2.55; sdS+=A.sd[i]/2.55;
     }
     const n=sel.n;
+    if (!n || !Object.keys(ch).length){ el.style.display="none"; return; }
     const topCl=Object.entries(cl).sort((a,b)=>b[1]-a[1]).slice(0,3)
       .map(([c,k])=>{ const id=+c;
         const nm=id<0? "noise" : (clTable[id]?.name||("cluster "+id));
@@ -1014,7 +1024,8 @@ function hClamp(){
 }
 function hChildren(p){
   const c=hChrom[p], base=chromOff[c], nb=P.meta.chrom_nbins[c];
-  const per=Math.round(P.heatmap.bin_mb*1e6/P.meta.bin_bp), start=hStart[p]*per;
+  const per=Math.round(P.heatmap.bin_mb*1e6/P.meta.bin_bp);
+  const start=Math.round(hStart[p]*1e6/P.meta.bin_bp);
   const out=[];
   for(let j=0;j<per;j++){ const k=start+j; if(k<nb) out.push(base+k); }
   return out;
@@ -1038,7 +1049,6 @@ function orderIdx(){ if (hOrder==="genome"){ const a=new Int32Array(hn); for(let
 let hOrd=null;
 function renderHeatBase(){
   if(!HM) return;
-  hLastR=performance.now();
   const r=heat.getBoundingClientRect();
   const side=Math.min(Math.round(r.width)||760, 760);
   hSide=side; hArea=side-MGL;
@@ -1071,8 +1081,9 @@ function renderHeatBase(){
   mm.getContext("2d").putImageData(img,0,0);
   c.drawImage(mm, MGL, MGT);
   // annotation strips: chromosome then satellite class, both axes
+  const stripNoise = TH.noise;
   const stripCol=(i,which)=> which===0 ? chromColor[hChrom[i]]
-    : (hCensat ? (CEN[hCensat[i]]==="non_sat"? css("--noise") : (cenColor[CEN[hCensat[i]]]||css("--noise"))) : css("--noise"));
+    : (hCensat ? (CEN[hCensat[i]]==="non_sat"? stripNoise : (cenColor[CEN[hCensat[i]]]||stripNoise)) : stripNoise);
   for(let xx=0;xx<hArea;xx++){
     const i=hOrd[Math.min(hn-1,Math.floor(hv.c0+(xx+0.5)*sc))];
     c.fillStyle=stripCol(i,0); c.fillRect(MGL+xx, 0, 1, 9);
@@ -1135,7 +1146,7 @@ function drawHeatFrame(){
     hctx.globalAlpha=1;
   }
 }
-function drawHeat(){ renderHeatBase(); drawHeatFrame(); }
+function drawHeat(){ renderHeatBase(); drawHeatFrame(); hLastR=performance.now(); }
 function requestHeatRender(){
   const now=performance.now();
   if(now-hLastR>45){ drawHeat(); }
@@ -1165,8 +1176,9 @@ function hHoverReadout(a,b){
     (hClust[a]>=0&&hClust[a]===hClust[b]? " · same pairwise cluster":"");
 }
 function hPairSelect(a,b){
+  const kids=[...new Set([...hChildren(a), ...hChildren(b)])].filter(i=>i>=0&&i<N);
+  if(!kids.length) return;
   hPair={a,b};
-  const kids=[...new Set([...hChildren(a), ...hChildren(b)])];
   const mask=new Uint8Array(N); kids.forEach(i=>mask[i]=1);
   toggleSel({type:"bins", mask, n:kids.length});
   document.getElementById("heatreadout").innerHTML =
@@ -1213,6 +1225,7 @@ heat.addEventListener("pointerleave", ()=>{
   hCursor=null; if(hBase) drawHeatFrame();
   if(!hPair) document.getElementById("heatreadout").innerHTML="hover the matrix…"; });
 function hZoomAt(mx,my,f){
+  if(!HM || !hArea) return;
   const span2=Math.max(16, Math.min(hn, hv.span*f));
   const ra=hv.r0+(my-MGT)/hArea*hv.span, ca=hv.c0+(mx-MGL)/hArea*hv.span;
   hv.r0=ra-(my-MGT)/hArea*span2; hv.c0=ca-(mx-MGL)/hArea*span2; hv.span=span2;
@@ -1246,11 +1259,13 @@ document.getElementById("figs").innerHTML = Object.entries(P.figs).map(([k,v])=>
 /* ---------- layout + theme ---------- */
 function layout(){
   dpr=Math.min(devicePixelRatio||1,2);
+  refreshTheme();
   invalidate();
   const mr=map.getBoundingClientRect();
   [mw,mh]=sizeCanvas(map, Math.max(420, Math.min(Math.round(innerHeight*0.78), mr.width)));
   [rw,rh]=sizeCanvas(rib, RTOP+ROWH*P.meta.chroms.length+6);
   drawMap(); drawRibbon(); drawHeat();
+  buildLegend(); drawCard();   // theme-baked chips/gradients/swatches
 }
 /* ---------- map zoom / pan / box-select ---------- */
 let drag=null, boxMode=false, pinch=null;
@@ -1323,7 +1338,7 @@ function bindMapInteractions(){
       const d=drag;
       if (wasBox){ applyBox(); }
       drag=null;
-      if (wasTap) tapSelect(nearest(d.x0,d.y0), d.type==="box" || e.shiftKey);
+      if (wasTap && !morph) tapSelect(nearest(d.x0,d.y0), d.type==="box" || e.shiftKey);
       drawMap();
     }
   };

@@ -36,9 +36,13 @@ def bin_periods(pos: np.ndarray, hashes: np.ndarray, n_bins: int, bin_bp: int):
     p = pos[order].astype(np.int64)
     h = hashes[order]
     same = h[1:] == h[:-1]
-    gaps = (p[1:] - p[:-1])[same]
-    gbin = (p[:-1][same] // bin_bp).astype(np.int64)
-    ok = (gaps >= GRID[0]) & (gaps <= GRID[-1])
+    left = p[:-1][same]
+    right = p[1:][same]
+    gaps = right - left
+    gbin = (left // bin_bp).astype(np.int64)
+    # keep gaps whose BOTH endpoints lie in the same bin (the docstring's
+    # "within one bin"), on a half-open grid matching the band re-selection
+    ok = (gaps >= GRID[0]) & (gaps < GRID[-1]) & ((right // bin_bp) == gbin)
     gaps, gbin = gaps[ok], gbin[ok]
     if gaps.size == 0:
         return period, strength

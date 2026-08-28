@@ -5,15 +5,16 @@ the same matrix -> SVD -> UMAP path runs, and the 2-D layout is Procrustes-
 aligned (rotation/reflection/scale) to the k=21 baseline so that morphing
 between layouts shows structural change, not UMAP's arbitrary orientation.
 
-Per-k judge-side metrics (satellite health + mainland dialect R^2 on the 2-D
-layout) ship with the views so the atlas slider can display them live.
+Per-k judge-side metrics ship with the views so the atlas slider can display
+them live — all under ONE protocol (mainland R^2 on the 12-D embedding,
+alpha->chromosome by adjacency-excluded neighbor vote), so chips from
+different labs stay comparable.
 
 k=15 is included on purpose: 4^15 is about the genome's own size, so it sits
 at the random-collision floor -- the ladder lets you watch that happen.
 """
 
 import json
-import shutil
 import time
 import warnings
 
@@ -22,7 +23,7 @@ import pandas as pd
 
 warnings.filterwarnings("ignore")
 
-from .analyze import SAT_CLASSES_FOR_PURITY, knn_cv_accuracy, semantic_acc
+from .analyze import SAT_CLASSES_FOR_PURITY, excluded_neighbor_vote, semantic_acc
 from .config import DATA, OUT, Params, PARAMS
 from .embed_run import umap_embed
 from .matrix import build_matrix, downsample_store, gram_rsvd
@@ -44,14 +45,16 @@ def procrustes_to(base: np.ndarray, Y: np.ndarray) -> np.ndarray:
 
 
 def ensure_sketch(k: int) -> Params:
+    """Sketch the genome at word length k if its store is absent.
+
+    write_bins=False keeps the canonical bin-stats parquet untouched — the
+    multi-k labs only need the sketch store, and the parquet's sketch_size
+    columns must stay those of the default k."""
     p = Params(k=k)
     if not p.sketch_npz.exists():
-        bak = DATA / "bins_100000.parquet.bak"
-        shutil.copy(p.bins_parquet, bak)
         from . import sketch_run
 
-        sketch_run.run(p)
-        shutil.move(bak, p.bins_parquet)  # k=21 bin stats stay canonical
+        sketch_run.run(p, write_bins=False)
     return p
 
 
@@ -74,15 +77,18 @@ def run(params: Params = PARAMS) -> None:
     from sklearn.model_selection import cross_val_score
     from sklearn.neighbors import KNeighborsRegressor
 
-    def eval_layout(xy, Z):
+    starts = bins["start"].to_numpy()
+
+    def eval_layout(xy, Z, y12):
         r = {"sat_sem_2d": round(semantic_acc(xy[sat].astype(np.float64), censat[sat]), 4)}
         keep = pd.Series(chroms[alpha_mask]).value_counts()
         keep = keep[keep >= 5].index
         m = alpha_mask & np.isin(chroms, keep)
-        r["alpha_chrom"] = round(knn_cv_accuracy(Z[m], chroms[m], k=10)[0], 4)
+        r["alpha_chrom"] = round(excluded_neighbor_vote(
+            Z[m], chroms[m], chroms[m], starts[m], params.bin_bp, k=10)[0], 4)
         for name, v in COV.items():
             s = cross_val_score(
-                KNeighborsRegressor(n_neighbors=15), xy[eu], v[eu], cv=5, scoring="r2"
+                KNeighborsRegressor(n_neighbors=15), y12[eu], v[eu], cv=5, scoring="r2"
             ).mean()
             r[f"r2_{name}"] = round(float(s), 4)
         r["mainland_score"] = round(
@@ -99,8 +105,9 @@ def run(params: Params = PARAMS) -> None:
         X, _, _, _ = build_matrix(ip, h, c, params.min_df)
         Z, _ = gram_rsvd(X, params.svd_dims, seed=params.seed)
         xy = umap_embed(Z, 2, params)
+        y12 = umap_embed(Z, 12, params, min_dist=0.0)
         layouts[k] = xy
-        metrics[k] = eval_layout(xy, Z)
+        metrics[k] = eval_layout(xy, Z, y12)
         metrics[k]["t_s"] = int(time.time() - t1)
         print(f"k={k}: {json.dumps(metrics[k])}", flush=True)
 

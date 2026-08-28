@@ -8,7 +8,6 @@ Candidates:
 """
 
 import json
-import shutil
 import time
 import warnings
 
@@ -26,7 +25,7 @@ p = PARAMS
 t0 = time.time()
 bins = pd.read_parquet(OUT / "bins_embedded.parquet")
 annot = pd.read_parquet(OUT / f"annot_{p.bin_bp}.parquet")
-z = np.load(OUT / f"svd_s{p.embed_scaled}.npz")
+z = np.load(p.svd_npz())
 Z21, sig21 = z["Z"].astype(np.float64), z["sigma"].astype(np.float64)
 
 censat = annot["censat_class"].replace("", "non_sat").to_numpy()
@@ -105,14 +104,9 @@ a_best = int(best["tag"][1:]) / 100
 print(f"## best alpha = {a_best} ({best['tag']})", flush=True)
 
 # ---- k=17 vocabulary ------------------------------------------------------
-p17 = Params(k=17)
-if not p17.sketch_npz.exists():
-    bak = DATA / "bins_100000.parquet.bak"
-    shutil.copy(p17.bins_parquet, bak)
-    from kmer_clust import sketch_run
+from kmer_clust.kladder import ensure_sketch
 
-    sketch_run.run(p17)
-    shutil.move(bak, p17.bins_parquet)  # keep k=21 bin stats canonical
+p17 = ensure_sketch(17)
 zz = np.load(p17.sketch_npz)
 ip, h, c = downsample_store(zz["indptr"], zz["hashes"], zz["counts"], p.embed_scaled)
 X17, _, _, _ = build_matrix(ip, h, c, p.min_df)

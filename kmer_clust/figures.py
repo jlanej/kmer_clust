@@ -294,7 +294,11 @@ def fig_acro(params: Params):
 
     bins = pd.read_parquet(OUT / "bins_embedded.parquet")
     ac = pd.read_parquet(acro_path)
-    xy = np.load(kl_path)[f"k{params.k}"]
+    kl = np.load(kl_path)
+    if f"k{params.k}" not in kl.files:
+        print(f"  (k{params.k} not in kladder.npz; acro figure skipped)")
+        return
+    xy = kl[f"k{params.k}"]
     COLS = ["#2a78d6", "#eb6834", "#1baf7a", "#e87ba4", "#4a3aa7"]
     GREY = np.array([201, 200, 194]) / 255
     col = np.tile(np.array([232, 230, 223]) / 255 * 0.93, (len(bins), 1))

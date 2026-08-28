@@ -46,6 +46,10 @@ class Params:
     def sketch_npz(self) -> Path:
         return DATA / f"sketch_k{self.k}_s{self.base_scaled}_bin{self.bin_bp}.npz"
 
+    def svd_npz(self, scaled: int | None = None) -> Path:
+        scaled = scaled or self.embed_scaled
+        return OUT / f"svd_k{self.k}_s{scaled}_bin{self.bin_bp}.npz"
+
     @property
     def bins_parquet(self) -> Path:
         return DATA / f"bins_{self.bin_bp}.parquet"

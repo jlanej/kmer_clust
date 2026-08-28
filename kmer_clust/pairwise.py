@@ -38,11 +38,15 @@ def merge_to_parents(bins: pd.DataFrame, indptr, hashes, counts, parent_bp: int)
     p_indptr = np.zeros(n_parents + 1, np.int64)
     np.cumsum(np.bincount(b_u, minlength=n_parents), out=p_indptr[1:])
 
-    agg = bins.groupby(parent_of_bin, sort=False).agg(
+    tmp = bins[["chrom", "start", "end", "acgt"]].copy()
+    tmp["gc_bases"] = bins["gc"].to_numpy() * bins["acgt"].to_numpy()
+    agg = tmp.groupby(parent_of_bin, sort=False).agg(
         chrom=("chrom", "first"), start=("start", "min"), end=("end", "max"),
-        acgt=("acgt", "sum"), gc_sum=("gc", "mean"),
+        acgt=("acgt", "sum"), gc_bases=("gc_bases", "sum"),
     )
-    parents = agg.reset_index(drop=True).rename(columns={"gc_sum": "gc"})
+    parents = agg.reset_index(drop=True)
+    parents["gc"] = parents["gc_bases"] / np.maximum(parents["acgt"], 1)
+    parents = parents.drop(columns=["gc_bases"])
     parents["sketch_size"] = np.diff(p_indptr)
     return parents, p_indptr, h_u, c_sum.astype(np.uint32)
 

@@ -113,17 +113,24 @@ on the atlas page):
 |---|---|
 | bins / clusters / noise | 31,185 · 133 · 33.3% |
 | satellite-cluster purity (size-weighted) / recovery | 90.7% / 90.4% |
-| αSat HOR bin → chromosome, kNN CV (chance) | **95.7%** (7.9%) |
-| rDNA bin → chromosome — the predicted weak side (chance) | 74.5% (35.7%) |
-| satellite family recovery, kNN CV (chance) | **97.0%** (29.0%) |
+| αSat HOR bin → chromosome, leakage-free¹ (chance) | **92.0%** (7.9%) |
+| rDNA bin → chromosome — the predicted weak side¹ (chance) | 70.4% (35.7%) |
+| satellite family recovery, leakage-free¹ (chance) | **96.8%** (29.0%) |
 | satellite semantic accuracy across 4 UMAP seeds | 94.3–94.4% every seed |
 | satellite semantic accuracy at half / quarter sketch depth | 96.3% / 96.4% |
 | HDBSCAN agreement at comparable granularity (full 10× grid) | ARI 0.61 (0.34) |
 | model vs exact distance, 1 Mb pairs (Spearman) | ρ 0.54 |
-| live-HOR bins: tandem period from hash spacing alone | **1,364 bp = 7.99 × the 171 bp monomer** (83% periodic) |
+| live-HOR bins: tandem period from hash spacing alone | **1,364 bp = 7.99 × the 171 bp monomer** (85% periodic) |
 | rDNA bins: tandem period from hash spacing alone | **44.8 kb** (the ~45 kb unit) |
-| mainland dialect R² (Alu/L1/SD/GC): k=21 → k=17 vocabulary | 0.465 → **0.530** (satellites intact) |
-| dual vocabulary k21⊕k17: dialect R² / HDBSCAN noise | 0.501 / **2.2%** (vs 33.3% baseline) |
+| mainland dialect R² (unified 12-D protocol): k=21 → k=17 | 0.465 → **0.525** (satellites intact) |
+| consensus k17⊕k21: dialect R² / HDBSCAN noise | 0.512 / **2.2%** (vs 33.3% baseline) |
+| info k15⊕k21 / k=15 alone: dialect R² | 0.585 / 0.661 (composition end) |
+
+¹ classification is a similarity-weighted vote among cosine neighbors with
+same-chromosome bins within ±5 bins **excluded**, so a bin's own array cannot
+vote for it — no adjacency leakage. (The naive CV formulation scored 95.7% on
+αSat; removing the leakage costs under 4 points — the signal is cross-array,
+not positional.)
 
 The raw k=15 neighbor-overlap numbers under reseeding/subsampling are low
 (0.11–0.24) — and that is the honest reading of a dense euchromatic mass whose

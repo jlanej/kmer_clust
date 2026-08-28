@@ -39,7 +39,10 @@ def aggregate_bin_hashes(bin_ids: np.ndarray, hashes: np.ndarray, n_bins: int):
     return indptr, h_u, counts
 
 
-def run(params: Params) -> None:
+def run(params: Params, write_bins: bool = True) -> None:
+    """Sketch the genome. write_bins=False skips rewriting the bin-stats
+    parquet (which is k-dependent but lives at a k-independent path) — used
+    by multi-k callers that only need the sketch store."""
     k, scaled, bin_bp = params.k, params.base_scaled, params.bin_bp
     rows = []
     all_indptr = [np.zeros(1, np.int64)]
@@ -47,6 +50,9 @@ def run(params: Params) -> None:
     all_counts = []
     t0 = time.time()
     for chrom, codes in iter_chrom_codes(params):
+        if codes.size == 0:
+            print(f"  {chrom}: empty record, skipped")
+            continue
         t1 = time.time()
         pos, hashes = sketch_codes(codes, k, scaled)
         n_bins = (codes.size + bin_bp - 1) // bin_bp
@@ -82,7 +88,7 @@ def run(params: Params) -> None:
         rows, columns=["chrom", "start", "end", "acgt", "gc", "sketch_size"]
     )
     bins["distinct_est"] = bins["sketch_size"] * scaled
-    bins.to_parquet(params.bins_parquet, index=False)
+    # npz first: a crash mid-save then leaves the canonical parquet untouched
     np.savez_compressed(
         params.sketch_npz,
         indptr=indptr,
@@ -90,6 +96,8 @@ def run(params: Params) -> None:
         counts=counts,
         meta=np.array([k, scaled, bin_bp], np.int64),
     )
+    if write_bins:
+        bins.to_parquet(params.bins_parquet, index=False)
     print(
         f"sketched {len(bins)} bins, {hashes.size/1e6:.1f} M unique (bin,hash) pairs "
         f"in {time.time()-t0:.0f}s -> {params.sketch_npz.name}"

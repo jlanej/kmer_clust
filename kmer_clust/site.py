@@ -47,15 +47,14 @@ def build_payload(params: Params) -> dict:
     chrom_idx = np.array([chroms.index(c) for c in bins["chrom"]], np.uint8)
     chrom_nbins = [int((bins["chrom"] == c).sum()) for c in chroms]
 
-    qx, x0, x1 = quant16(bins["x"].to_numpy())
-    qy, y0, y1 = quant16(bins["y"].to_numpy())
+    qx, _, _ = quant16(bins["x"].to_numpy())
+    qy, _, _ = quant16(bins["y"].to_numpy())
     censat_all = CENSAT_CLASSES + ["non_sat"]
     cen_map = {c: i for i, c in enumerate(censat_all)}
     censat_i = np.array(
         [cen_map[c] if c else cen_map["non_sat"] for c in annot["censat_class"]], np.uint8
     )
 
-    rm_cols = [c for c in ("rm_alu", "rm_l1", "rm_ltr", "rm_sva") if c in annot]
     payload = {
         "meta": {
             "n": len(bins),
@@ -65,8 +64,6 @@ def build_payload(params: Params) -> dict:
             "base_scaled": params.base_scaled,
             "chroms": chroms,
             "chrom_nbins": chrom_nbins,
-            "x_range": [x0, x1],
-            "y_range": [y0, y1],
             "censat_classes": censat_all,
         },
         "arrays": {
@@ -79,10 +76,6 @@ def build_payload(params: Params) -> dict:
             "gc": b64(u8(bins["gc"], 0.25, 0.65)),
             "private": b64(u8(bins["private_frac"])),
             "sd": b64(u8(annot["sd_frac"])),
-            "prob": b64(u8(bins["cluster_prob"])),
-            "sketch": b64(
-                np.clip(bins["sketch_size"].to_numpy(np.float64) / 40, 0, 255).astype(np.uint8)
-            ),
         },
         "clusters": {
             # via to_json so numpy scalar types become plain JSON numbers
@@ -92,10 +85,6 @@ def build_payload(params: Params) -> dict:
         "censat_colors": palette["censat"],
         "metrics": metrics,
     }
-    for c in rm_cols:
-        payload["arrays"][c] = b64(u8(annot[c]))
-        payload["meta"].setdefault("rm_cols", []).append(c)
-
     periods_path = OUT / f"periods_{params.bin_bp}.parquet"
     if periods_path.exists():
         per = pd.read_parquet(periods_path)
@@ -126,64 +115,81 @@ def build_payload(params: Params) -> dict:
     if kl_json.exists() and kl_npz.exists():
         kl = json.loads(kl_json.read_text())
         store = np.load(kl_npz)
-        names = [f"k{k}" for k in kl["ks"]]
-        names += [n for n in ("concat", "duo1521") if n in store]
-        allxy = np.stack([store[n] for n in names])
-        lo = allxy.reshape(-1, 2).min(axis=0)
-        hi = allxy.reshape(-1, 2).max(axis=0)
+        base_key = f"k{params.k}"
+        if any(len(store[n]) != len(bins) for n in store.files):
+            print("  (kladder.npz bin count differs from the current run; "
+                  "views skipped — re-run `python -m kmer_clust.kladder`)")
+            store = None
+        if store is None or base_key not in store.files:
+            if store is not None:
+                print(f"  ({base_key} not in kladder.npz; views skipped)")
+            store = None
+        names = [f"k{k}" for k in kl["ks"]] if store is not None else []
+        if store is not None:
+            names += [n for n in ("concat", "duo1521") if n in store]
+        if names:
+            allxy = np.stack([store[n] for n in names])
+            lo = allxy.reshape(-1, 2).min(axis=0)
+            hi = allxy.reshape(-1, 2).max(axis=0)
 
-        def qshared(v, ax):
-            return np.round(
-                (v - lo[ax]) / max(hi[ax] - lo[ax], 1e-9) * 65535
-            ).astype(np.uint16)
+            def qshared(v, ax):
+                return np.round(
+                    (v - lo[ax]) / max(hi[ax] - lo[ax], 1e-9) * 65535
+                ).astype(np.uint16)
 
-        concat_metrics = duo_metrics = None
-        if lab_json.exists():
-            lab = json.loads(lab_json.read_text())
-            concat_metrics = next(
-                (r for r in lab["results"] if r["tag"] == "concat"), None
-            )
-        mk_json = OUT / "multik_lab.json"
-        if mk_json.exists():
-            mk = json.loads(mk_json.read_text())
-            duo_metrics = next((r for r in mk if r["tag"] == "k15+k21"), None)
+            concat_metrics = duo_metrics = None
+            if lab_json.exists():
+                lab = json.loads(lab_json.read_text())
+                concat_metrics = next(
+                    (r for r in lab["results"] if r["tag"] == "concat"), None
+                )
+            mk_json = OUT / "multik_lab.json"
+            if mk_json.exists():
+                mk = json.loads(mk_json.read_text())
+                duo_metrics = next((r for r in mk if r["tag"] == "k15+k21"), None)
+            # single-protocol chip metrics override (one judge for every view)
+            vm_json = OUT / "view_metrics.json"
+            unified = json.loads(vm_json.read_text()) if vm_json.exists() else {}
 
-        TIPS = {
-            "concat": "consensus vocabulary k17⊕k21 — cosine is the mean of two "
-                      "adjacent horizons; their agreement sharpens clusters (~2% noise)",
-            "duo1521": "information vocabulary k15⊕k21 — composition + identity, the "
-                       "best-organized mainland; the horizons' disagreement lowers "
-                       "flat-cluster confidence",
-            "k15": "single vocabulary, k=15 — at the composition end: 4^15 is about "
-                   "the genome's own size, so sharing drifts from identity to style",
-        }
-        views = []
-        for n in names:
-            xy = store[n]
-            if n == "concat":
-                label, met = "consensus k17⊕k21", concat_metrics
-            elif n == "duo1521":
-                label, met = "info k15⊕k21", duo_metrics
-            else:
-                k = int(n[1:])
-                label, met = f"k={k}", kl["metrics"].get(str(k))
-            views.append({
-                "id": n, "label": label,
-                "tip": TIPS.get(n, f"single vocabulary, k={n[1:]} — a full re-sketch "
-                                   "of the genome at this word length"),
-                "qx": b64(qshared(xy[:, 0], 0)), "qy": b64(qshared(xy[:, 1], 1)),
-                "metrics": {
-                    key: met[key]
-                    for key in ("mainland_score", "sat_sem_2d", "alpha_chrom")
-                    if met and key in met
-                } if met else None,
-            })
-        payload["views"] = views
-        payload["meta"]["slider_ids"] = [f"k{k}" for k in kl["ks"]]
-        # the k=21 ladder layout IS the baseline (same seed, same path); use it
-        # for the primary arrays so slider morphs start from a shared frame
-        payload["arrays"]["qx"] = b64(qshared(store["k21"][:, 0], 0))
-        payload["arrays"]["qy"] = b64(qshared(store["k21"][:, 1], 1))
+            TIPS = {
+                "concat": "consensus vocabulary k17⊕k21 — cosine is the mean of two "
+                          "adjacent horizons; their agreement sharpens clusters (~2% noise)",
+                "duo1521": "information vocabulary k15⊕k21 — composition + identity; the "
+                           "best-organized mainland among identity-anchored views (k=15 "
+                           "alone scores higher but is pure composition)",
+                "k15": "single vocabulary, k=15 — at the composition end: 4^15 is about "
+                       "the genome's own size, so sharing drifts from identity to style",
+            }
+            views = []
+            for n in names:
+                xy = store[n]
+                if n == "concat":
+                    label, met = "consensus k17⊕k21", concat_metrics
+                elif n == "duo1521":
+                    label, met = "info k15⊕k21", duo_metrics
+                else:
+                    k = int(n[1:])
+                    label, met = f"k={k}", kl["metrics"].get(str(k))
+                met = unified.get(n, met)
+                views.append({
+                    "id": n, "label": label,
+                    "tip": TIPS.get(n, f"single vocabulary, k={n[1:]} — a full re-sketch "
+                                       "of the genome at this word length"),
+                    "qx": b64(qshared(xy[:, 0], 0)), "qy": b64(qshared(xy[:, 1], 1)),
+                    "metrics": {
+                        key: met[key]
+                        for key in ("mainland_score", "sat_sem_2d", "alpha_chrom")
+                        if met and key in met
+                    } if met else None,
+                })
+            if views:
+                payload["views"] = views
+                payload["meta"]["slider_ids"] = [f"k{k}" for k in kl["ks"]]
+                # the default-k ladder layout IS the baseline (same seed, same
+                # path); use it for the primary arrays so slider morphs start
+                # from a shared frame
+                payload["arrays"]["qx"] = b64(qshared(store[base_key][:, 0], 0))
+                payload["arrays"]["qy"] = b64(qshared(store[base_key][:, 1], 1))
 
     # ---- 1 Mb pairwise heatmap as grayscale PNG ----------------------------
     from PIL import Image
@@ -205,9 +211,13 @@ def build_payload(params: Params) -> dict:
     )[0]
     cov_par = annot[[f"cov_{c}" for c in classes_nc]].groupby(parent_id).mean().to_numpy()
     p_censat = np.full(len(parents), cen_map["non_sat"], np.uint8)
-    best, bestv = cov_par.argmax(axis=1), cov_par.max(axis=1)
-    hit = bestv >= 0.3
-    p_censat[hit] = [cen_map[classes_nc[i]] for i in best[hit]]
+    if cov_par.shape[0] == len(parents):
+        best, bestv = cov_par.argmax(axis=1), cov_par.max(axis=1)
+        hit = bestv >= 0.3
+        p_censat[hit] = [cen_map[classes_nc[i]] for i in best[hit]]
+    else:
+        print(f"  (pairwise cache has {len(parents)} parents vs {cov_par.shape[0]} "
+              "current; heatmap censat strip skipped — re-run `make pairwise`)")
 
     payload["heatmap"] = {
         "png": base64.b64encode(buf.getvalue()).decode(),
@@ -223,7 +233,17 @@ def build_payload(params: Params) -> dict:
 
     proj_path = OUT / "projection.json"
     if proj_path.exists():
-        payload["projection"] = json.loads(proj_path.read_text())
+        proj = json.loads(proj_path.read_text())
+        max_id = max(
+            (b for st_ in proj.get("sets", []) for w in st_["windows"]
+             for lst in (w.get("hits", []), ) for b, _ in lst),
+            default=-1,
+        )
+        if max_id < len(bins):
+            payload["projection"] = proj
+        else:
+            print(f"  (projection.json references bin {max_id} >= {len(bins)}; "
+                  "stale — re-run `make project`; panel skipped)")
 
     payload["figs"] = {
         name: png_b64(OUT / "figs" / f"{name}.png")

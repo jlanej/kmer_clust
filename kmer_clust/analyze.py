@@ -45,6 +45,35 @@ def semantic_acc(E, labels, min_n=10, metric="euclidean"):
     return acc
 
 
+def excluded_neighbor_vote(Z, labels, chroms, starts, bin_bp, k=10, excl_bins=5):
+    """Leakage-free classification: cosine neighbors with same-chromosome bins
+    within +-excl_bins of genomic adjacency excluded (a bin's own array cannot
+    vote for it), similarity-weighted vote (no alphabetical tie bias).
+
+    Returns (acc, y_true, y_pred, class_names).
+    """
+    Zn = Z / np.maximum(np.linalg.norm(Z, axis=1, keepdims=True), 1e-9)
+    S = (Zn @ Zn.T).astype(np.float64)
+    pos = (np.asarray(starts) // bin_bp).astype(np.int64)
+    ch = np.asarray(chroms)
+    adjacent = (ch[:, None] == ch[None, :]) & (
+        np.abs(pos[:, None] - pos[None, :]) <= excl_bins
+    )
+    S[adjacent] = -2.0  # excludes self and own-array continuation
+    names, y = np.unique(labels, return_inverse=True)
+    n = len(labels)
+    kk = min(k, n - 1)
+    top = np.argpartition(-S, kk, axis=1)[:, :kk]
+    y_pred = np.empty(n, np.int64)
+    for i in range(n):
+        w = np.zeros(len(names))
+        for j in top[i]:
+            if S[i, j] > -1:
+                w[y[j]] += max(S[i, j], 0.0)
+        y_pred[i] = int(w.argmax())
+    return float((y_pred == y).mean()), y, y_pred, list(names)
+
+
 def knn_cv_accuracy(Z, labels, k=10, folds=5, seed=42, metric="cosine"):
     """Stratified kNN cross-validated prediction. Returns (acc, y_true, y_pred)."""
     from sklearn.model_selection import StratifiedKFold
@@ -142,7 +171,15 @@ def acro_analysis(params: Params, bins, annot, Z) -> dict | None:
     top = np.argpartition(-S, K, axis=1)[:, :K]
     neigh_chrom = chrom_i[top]
     promisc = (neigh_chrom != chrom_i[:, None]).mean(axis=1)
-    votes = pd.DataFrame(neigh_chrom).mode(axis=1)[0].to_numpy()
+    # similarity-weighted vote (DataFrame.mode breaks ties alphabetically,
+    # which would structurally favour chr13/14/15 over chr21/22)
+    votes = np.empty(idx.size, dtype=object)
+    for r in range(idx.size):
+        w = {}
+        for j in top[r]:
+            if S[r, j] > -1:
+                w[chrom_i[j]] = w.get(chrom_i[j], 0.0) + max(float(S[r, j]), 0.0)
+        votes[r] = max(w, key=w.get) if w else chrom_i[r]
     acc = float((votes == chrom_i).mean())
     conf = np.zeros((len(ACROS), len(ACROS)), np.int32)
     a_ix = {c: i for i, c in enumerate(ACROS)}
@@ -179,7 +216,7 @@ def run(params: Params) -> dict:
     t0 = time.time()
     bins = pd.read_parquet(OUT / "bins_embedded.parquet")
     annot = pd.read_parquet(OUT / f"annot_{params.bin_bp}.parquet")
-    z = np.load(OUT / f"svd_s{params.embed_scaled}.npz")
+    z = np.load(params.svd_npz())
     Z = z["Z"]
     labels = bins["cluster"].to_numpy()
     censat = annot["censat_class"].replace("", "non_sat").to_numpy()
@@ -220,13 +257,16 @@ def run(params: Params) -> dict:
     rdna_mask = annot["cov_rDNA"].to_numpy() >= 0.5
     chroms = bins["chrom"].to_numpy()
     results_conf = {}
+    starts_all = bins["start"].to_numpy()
     for tag, mask in (("alpha", alpha_mask), ("rdna", rdna_mask)):
         if mask.sum() < 25:
             continue
         keep_cls = pd.Series(chroms[mask]).value_counts()
         keep_cls = keep_cls[keep_cls >= 5].index
         m2 = mask & np.isin(chroms, keep_cls)
-        acc, y, yp, names_c = knn_cv_accuracy(Z[m2], chroms[m2], k=10)
+        acc, y, yp, names_c = excluded_neighbor_vote(
+            Z[m2], chroms[m2], chroms[m2], starts_all[m2], params.bin_bp, k=10
+        )
         n_cls = len(names_c)
         conf = np.zeros((n_cls, n_cls), np.int32)
         np.add.at(conf, (y, yp), 1)
@@ -243,7 +283,9 @@ def run(params: Params) -> dict:
         cls_counts = pd.Series(censat[sat_bins]).value_counts()
         keep_cls = cls_counts[cls_counts >= 20].index
         m2 = sat_bins & np.isin(censat, keep_cls)
-        acc, y, yp, names_s = knn_cv_accuracy(Z[m2], censat[m2], k=10)
+        acc, y, yp, names_s = excluded_neighbor_vote(
+            Z[m2], censat[m2], chroms[m2], starts_all[m2], params.bin_bp, k=10
+        )
         conf = np.zeros((len(names_s), len(names_s)), np.int32)
         np.add.at(conf, (y, yp), 1)
         results_conf["taxonomy"] = {"conf": conf, "names": names_s}
@@ -388,7 +430,18 @@ def run(params: Params) -> dict:
     )
     with open(OUT / "conf_names.json", "w") as fh:
         json.dump({k: v["names"] for k, v in results_conf.items()}, fh)
-    with open(OUT / "metrics.json", "w") as fh:
+    metrics["classification_protocol"] = (
+        "sim-weighted vote among cosine neighbors; same-chromosome bins within "
+        "±5 bins excluded (no adjacency leakage)"
+    )
+    # merge over an existing metrics.json so keys owned by other stages
+    # (e.g. 'periodicity') survive a re-run of analyze alone
+    mpath = OUT / "metrics.json"
+    if mpath.exists():
+        merged = json.loads(mpath.read_text())
+        merged.update(metrics)
+        metrics = merged
+    with open(mpath, "w") as fh:
         json.dump(metrics, fh, indent=2)
     print(json.dumps(metrics, indent=2))
     return metrics
