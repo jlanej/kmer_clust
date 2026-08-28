@@ -25,7 +25,10 @@ defensins, Yq12 — found by vocabulary alone. Each set's one-liner appears unde
 travels four stations: its own <b>assembly</b> coordinates → its place in <b>word-space</b> →
 its <b>loci on T2T</b> (a solid stem to its best locus, thinner stems to runner-ups — one origin,
 all its homes) → <b>fine placement</b>, a second genome axis where every window lands at once at
-its exact-Jaccard-weighted position. <b>Click a window to pin it</b> — its world-line through all
+its exact-Jaccard-weighted position. Dots are <b>painted by assembly order</b> (1 → N, blue → orange): if fine placement lays the
+gradient out smoothly the projection is collinear with the assembly; a reversed run is an
+inversion, a shuffle is the commons — the <b>τ</b> readout on the fine axis scores it.
+<b>Click a window to pin it</b> — its world-line through all
 four stations draws at once and its loci light up in the views above; the <b>paths</b> toggle
 draws every world-line together, and <b>zoom locus</b> opens a per-locus detail view for the
 pinned window. Hover for hits and vocabulary coverage.</p>
@@ -103,7 +106,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // composite fine axis: only the matched chromosomes, min..max of the
   // placements (+2 Mb pad), ONE uniform px-per-Mb scale across segments so
   // the zoom is honest; breaks mark the excised genome
-  let FSEG=null;
+  let FSEG=null, DHUE=[], TAU=0, TAUV="";
+  const dcol=i=>`hsl(${DHUE[i]},68%,54%)`;
   function buildFineAxis(){
     const per=new Map();
     QS.forEach(w=>{ const f=w._fine;
@@ -146,6 +150,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     buildFineAxis();
     QS.forEach(w=>FXY.push([fineX(w._fine.ci, w._fine.mb), yFine()]));
+    // index paint: hue sweep first->last (blue -> purple -> orange, no green)
+    const nq=QS.length;
+    DHUE=QS.map((_,i)=>(215+165*(nq>1? i/(nq-1):0))%360);
+    // Kendall tau: assembly order vs fine-axis position (ties count 0)
+    let S=0;
+    for(let i=0;i<nq;i++) for(let j=i+1;j<nq;j++){
+      const d=FXY[j][0]-FXY[i][0];
+      if (Math.abs(d)>0.5) S+=Math.sign(d);
+    }
+    TAU = nq>1? S/(nq*(nq-1)/2) : 0;
+    TAUV = TAU>=0.85?"collinear": TAU<=-0.85?"inverted":
+           Math.abs(TAU)>=0.5?"mostly ordered":"scrambled";
   }
   function dInfo(){
     if (pinned<0) return null;
@@ -196,7 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   function worldLine(i, alpha){
     const pts=STATIONS(i);
-    ctx.strokeStyle=ACC; ctx.setLineDash([4,4]);
+    ctx.strokeStyle=dcol(i); ctx.setLineDash([4,4]);
     ctx.globalAlpha=alpha; ctx.lineWidth=alpha>0.5?1.6:1.2;
     ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
     for(let k=1;k<pts.length;k++)
@@ -225,6 +241,11 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.beginPath(); ctx.moveTo(MX,lineAY); ctx.lineTo(W-MX,lineAY); ctx.stroke();
     ctx.globalAlpha=0.7;
     ctx.fillText(PR.sets[setIdx].label+" — assembly coordinates", MX, lineAY-10);
+    if (QS.length){
+      ctx.globalAlpha=0.8;
+      ctx.fillText("1", AXY[0][0]-13, lineAY+3);
+      ctx.fillText(String(QS.length), AXY[QS.length-1][0]+9, lineAY+3);
+    }
     if (!zoom){
       // loci line (plain) + fine axis (ticked, labeled)
       ctx.globalAlpha=0.4;
@@ -265,7 +286,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.globalAlpha=0.7;
         ctx.fillText(`fine placement — showing ${FSEG.totalMb.toFixed(0)} Mb of `+
           `${(N*P.meta.bin_bp/1e6).toFixed(0)} Mb (${FSEG.zoomX.toFixed(0)}× zoom), `+
-          `matched chromosomes only`, MX, yf+37);
+          `matched chromosomes only · assembly order τ ${TAU>=0?"+":""}${TAU.toFixed(2)} (${TAUV})`, MX, yf+37);
       }
       ctx.globalAlpha=1;
       // stems: lanes -> loci line (stage 2); fine dots -> their locus tick (stage 3)
@@ -274,14 +295,14 @@ document.addEventListener("DOMContentLoaded", () => {
         for(let i=0;i<QS.length;i++){
           const foc=(i===pinned||i===hover);
           const [x,y]=pos(i);
-          ctx.strokeStyle=ACC;
+          ctx.strokeStyle=dcol(i);
           if (stage===2){
             ctx.lineWidth=foc?1.8:1.1; ctx.globalAlpha=(foc?0.85:0.3)*fadeIn;
             stem(x,y,TICKS[i][0],yl-1);
             ctx.lineWidth=foc?1.2:0.8; ctx.globalAlpha=(foc?0.6:0.16)*fadeIn;
             for(let li=1;li<TICKS[i].length;li++){
               stem(x,y,TICKS[i][li],yl-1);
-              ctx.save(); ctx.fillStyle=ACC;
+              ctx.save(); ctx.fillStyle=dcol(i);
               ctx.beginPath(); ctx.arc(TICKS[i][li],yl,2.6,0,7); ctx.fill(); ctx.restore();
             }
           } else {
@@ -290,7 +311,7 @@ document.addEventListener("DOMContentLoaded", () => {
             if (foc){
               ctx.lineWidth=1; ctx.globalAlpha=0.5*fadeIn;
               for(let li=1;li<TICKS[i].length;li++){
-                ctx.save(); ctx.fillStyle=ACC;
+                ctx.save(); ctx.fillStyle=dcol(i);
                 ctx.beginPath(); ctx.arc(TICKS[i][li],yl,2.6,0,7); ctx.fill(); ctx.restore();
                 stem(x,y,TICKS[i][li],yl+1);
               }
@@ -305,7 +326,7 @@ document.addEventListener("DOMContentLoaded", () => {
       for(let i=0;i<QS.length;i++){
         const foc=(i===pinned||i===hover);
         const x=FXY[i][0], hgt=QS[i]._fine.j*44;
-        ctx.fillStyle=ACC; ctx.globalAlpha=(foc?0.6:0.3)*ba;
+        ctx.fillStyle=dcol(i); ctx.globalAlpha=(foc?0.7:0.38)*ba;
         ctx.fillRect(x-1.5, yf-hgt, 3, hgt);
       }
       ctx.globalAlpha=1;
@@ -349,7 +370,7 @@ document.addEventListener("DOMContentLoaded", () => {
     for(let i=0;i<QS.length;i++){
       const [x,y]=pos(i);
       ctx.globalAlpha = zoom? (i===pinned?0.25:0.08) : 1;
-      ctx.fillStyle=ACC;
+      ctx.fillStyle=dcol(i);
       ctx.beginPath(); ctx.arc(x,y,(i===hover||i===pinned)?6:4.2,0,7); ctx.fill();
       ctx.strokeStyle=css("--card"); ctx.lineWidth=1.2; ctx.stroke();
       if (i===pinned && !zoom){
@@ -385,6 +406,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if(best<0){ tip.style.display="none"; return; }
     const w=QS[best];
     tip.innerHTML=`<div class="loc">${w.label}</div>`+
+      `<div class="row">window <b>#${best+1}</b> of ${QS.length} in assembly order</div>`+
       `<div class="row">CHM13 knows <b>${Math.round(w.cover*100)}%</b> of its vocabulary</div>`+
       w.loci.map((l,li)=>`<div class="row">${li? "also: ":"best: "}<b>${l.chrom}:${l.start_mb}–${l.end_mb} Mb</b> · exact J <b>${l.sim.toFixed(3)}</b></div>`).join("")+
       `<div class="row" style="color:var(--muted)">${pinned===best? "pinned — click to release":"click to pin its full journey"}</div>`;

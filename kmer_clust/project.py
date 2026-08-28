@@ -32,7 +32,7 @@ QUERY_SETS = [
     ("hg00097_h2", "HG00097 hap2 · chr21 acro (HPRC)", "HG00097_hap2_hprc_r2_v1.0.1.fa.gz",
      "same locus, other haplotype — more of its vocabulary finds its best exact home on chr13"),
     ("na19909_h2", "NA19909 hap2 · chr21 acro (HPRC)", "NA19909_hap2_hprc_r2_v1.0.1.fa.gz",
-     "the extreme case: most of this 'chr21' slice matches CHM13's chr13 better than its chr21"),
+     "the extreme case: its best homes hop between chr13/14/21 — assembly order fully scrambled (τ −0.19)"),
 ]
 
 # famous T2T regions the showcase fishes out of a whole projected haplotype
@@ -44,9 +44,9 @@ SHOWCASES = [
     ("igh", "chr14", 99.0, 101.2, "IGH",
      "the immunoglobulin heavy-chain locus — germline-variable between people (window J spans 0.25–0.95)"),
     ("def8p", "chr8", 6.5, 13.0, "8p23.1 defensins",
-     "an inversion flanked by defensin-cluster segdups with copy-number variation between genomes (J 0.55–0.93)"),
+     "an inversion flanked by defensin-cluster segdups — the one showcase locus whose window order shuffles (τ +0.67)"),
     ("yq12", "chrY", 30.0, 60.0, "Yq12 heterochromatin",
-     "the giant DYZ satellite ocean; CHM13's chrY IS HG002's — near-self control (J≈0.90, runner-ups elsewhere in Yq12)"),
+     "the giant DYZ satellite ocean; CHM13's chrY IS HG002's — near-self control (J≈0.9, runner-ups elsewhere in Yq12)"),
 ]
 TOP_HITS = 8
 
@@ -268,11 +268,21 @@ def run(params: Params = PARAMS) -> None:
     print(f"projection -> out/projection.json, t={time.time()-t0:.0f}s")
 
 
-def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
-    """Project a WHOLE haplotype and pull out the windows whose best exact
-    locus lands in famous T2T regions — the projector locating landmarks in
-    an unannotated assembly by vocabulary alone."""
-    from collections import Counter
+def scan_haplotype(kit: Kit, fasta_path) -> list:
+    """Project every 100 kb window of a whole assembly; cached as parquet so
+    re-tuning the showcase selection does not re-pay the ~5 min scan."""
+    from pathlib import Path
+
+    tag = Path(fasta_path).name.removesuffix(".gz").removesuffix(".fa")
+    cache = OUT / f"hapscan_{tag}.parquet"
+    if cache.exists() and cache.stat().st_mtime > Path(fasta_path).stat().st_mtime:
+        df = pd.read_parquet(cache)
+        print(f"  hapscan cache hit: {len(df)} windows")
+        return [(row.contig, int(row.w),
+                 {"cover": float(row.cover),
+                  "hits": list(row.hits), "sims": list(row.sims),
+                  "ehits": list(row.ehits), "ejacc": list(row.ejacc)})
+                for row in df.itertuples()]
 
     p = kit.params
     win = p.bin_bp
@@ -300,26 +310,66 @@ def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
             if r and r["ehits"]:
                 results.append((name, w, r))
         del codes
-    print(f"  projected {len(results)} windows of {sample} in {time.time()-t0:.0f}s")
+    print(f"  projected {len(results)} windows in {time.time()-t0:.0f}s")
+    pd.DataFrame({
+        "contig": [n for n, _, _ in results],
+        "w": [w for _, w, _ in results],
+        "cover": [r["cover"] for _, _, r in results],
+        "hits": [r["hits"] for _, _, r in results],
+        "sims": [r["sims"] for _, _, r in results],
+        "ehits": [r["ehits"] for _, _, r in results],
+        "ejacc": [r["ejacc"] for _, _, r in results],
+    }).to_parquet(cache)
+    return results
 
+
+def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
+    """Project a WHOLE haplotype and pull out the windows whose best exact
+    locus lands in famous T2T regions — the projector locating landmarks in
+    an unannotated assembly by vocabulary alone. Each set is one CONTIGUOUS
+    assembly segment: windows between the first and last region hit stay in
+    even when their own best locus falls just outside the region box, so the
+    assembly axis has no artificial holes."""
+    results = scan_haplotype(kit, fasta_path)
+    by_contig = {}
+    for n, w, r in results:
+        by_contig.setdefault(n, {})[w] = r
+
+    win = kit.params.bin_bp
     sets = []
     for sid, chrom, mb0, mb1, label, blurb in SHOWCASES:
         m = (kit.bins["chrom"] == chrom) & (kit.bins["start"] >= mb0 * 1e6) \
             & (kit.bins["start"] < mb1 * 1e6)
         idset = set(np.flatnonzero(m.to_numpy()).tolist())
-        picked = [(n, w, r) for n, w, r in results if r["ehits"][0] in idset]
-        if len(picked) < 8:
-            print(f"  ({label}: only {len(picked)} windows hit "
+        hit_ws = {}
+        for n, w, r in results:
+            if r["ehits"][0] in idset:
+                hit_ws.setdefault(n, []).append(w)
+        if not hit_ws or max(len(v) for v in hit_ws.values()) < 8:
+            got = max((len(v) for v in hit_ws.values()), default=0)
+            print(f"  ({label}: only {got} windows hit "
                   f"{chrom}:{mb0}-{mb1}; skipped)")
             continue
-        dom = Counter(n for n, _, _ in picked).most_common(1)[0][0]
-        picked = [h for h in picked if h[0] == dom]
-        picked.sort(key=lambda h: -h[2]["ejacc"][0])
-        picked = sorted(picked[:cap], key=lambda h: h[1])
+        dom = max(hit_ws, key=lambda n: len(hit_ws[n]))
+        hs = set(hit_ws[dom])
+        lo, hi = min(hs), max(hs)
+        members = sorted(w for w in by_contig[dom] if lo <= w <= hi)
+        if len(members) > cap:
+            # trim to the contiguous run keeping the most in-region hits
+            # (never punch interior holes by dropping low-J windows)
+            best = (-1, -1.0, 0)
+            for i0 in range(len(members) - cap + 1):
+                run = members[i0:i0 + cap]
+                nh = sum(1 for w in run if w in hs)
+                tj = sum(by_contig[dom][w]["ejacc"][0] for w in run)
+                if (nh, tj) > (best[0], best[1]):
+                    best = (nh, tj, i0)
+            members = members[best[2]:best[2] + cap]
         windows = []
-        for name, w, r in picked:
+        for w in members:
+            r = by_contig[dom][w]
             windows.append({
-                "label": f"{name}:{w*win/1e6:.1f}–{(w+1)*win/1e6:.1f} Mb",
+                "label": f"{dom}:{w*win/1e6:.1f}–{(w+1)*win/1e6:.1f} Mb",
                 "pos_mb": round(w * win / 1e6, 2),
                 "cover": round(r["cover"], 3),
                 "hits": [[int(h), s2] for h, s2 in zip(r["hits"], r["sims"])] or

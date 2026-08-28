@@ -248,7 +248,8 @@ delete to remove.
 
 ![Projection tour, NA19909 hap2](docs/media/tour_na19909_h2.gif)
 
-*NA19909's chr21-acrocentric slice touring the four stations. Its fine
+*NA19909's chr21-acrocentric slice touring the four stations, closing on
+the world-line finale — every window's full path at once. Its fine
 placements land on an excised chr13 ∥ chr14 ∥ chr21 axis at 158× zoom —
 most of this haplotype's "chr21" slice finds its best exact home on
 CHM13's chr13.* (Control: [tour_chm13_slice.gif](docs/media/tour_chm13_slice.gif),
@@ -263,13 +264,25 @@ pulled out — no alignment, no assembly annotation, the projector locating
 landmarks by vocabulary alone. Five made the cut, and their exact-Jaccard
 levels read as a divergence dial across locus biology:
 
-| set | windows → top chrom | median J | what it shows |
-|---|---|---|---|
-| **Yq12 heterochromatin** | 44/44 → chrY | 0.90 | CHM13's chrY *is* HG002's — a near-self control; runner-up loci are other spots inside the same satellite ocean |
-| **IGH** (chr14) | 13/13 → chr14 | 0.87 | germline-variable between people; window J spans 0.25–0.95 |
-| **MHC / HLA** (chr6) | 44/44 → chr6 | 0.63 | the genome's most polymorphic region — divergent in sequence, colinear in structure, so every window still lands home |
-| **8p23.1 defensins** | 44/44 → chr8 | 0.57 | inversion flanked by copy-number-variable segdup clusters |
-| **MAPT / 17q21.31** | 15/15 → chr17 | 0.35 | the H1/H2 inversion polymorphism — most word-divergent locus here, yet placed exactly |
+| set | windows → top chrom | median J | order τ¹ | what it shows |
+|---|---|---|---|---|
+| **Yq12 heterochromatin** | 44/44 → chrY | 0.88 | +0.90 | CHM13's chrY *is* HG002's — a near-self control; runner-up loci are other spots inside the same satellite ocean, yet the windows still project *in order*: vocabulary resolves a gradient along the array |
+| **IGH** (chr14) | 13/13 → chr14 | 0.87 | +1.00 | germline-variable between people; window J spans 0.25–0.95 |
+| **MHC / HLA** (chr6) | 44/44 → chr6 | 0.63 | +1.00 | the genome's most polymorphic region — divergent in sequence, colinear in structure, so every window still lands home (one hypervariable window drops to J = 0.09 and *still* places on chr6) |
+| **8p23.1 defensins** | 44/44 → chr8 | 0.56 | +0.67 | inversion flanked by copy-number-variable segdup clusters — the one showcase locus whose window *order* shuffles |
+| **MAPT / 17q21.31** | 15/15 → chr17 | 0.35 | +1.00 | the H1/H2 inversion polymorphism — most word-divergent locus here, yet placed exactly and in order |
+
+¹ Kendall correlation between a window's index along the assembly segment
+and its fine placement along the excised axis — a synteny readout with no
+alignment anywhere. The atlas paints every dot by assembly order
+(blue → orange), so collinearity is visible as a smooth gradient at fine
+placement; τ is printed on the axis. The CHM13 self-control scores a
+perfect +1.00, and the three chr21-acro haplotype slices form a
+scrambling dial: HG00097 h1 +0.95, h2 +0.71, NA19909 h2 **−0.19** — the
+acrocentric commons, now measurable as lost ordering.
+
+Each set is one *contiguous* assembly segment (windows between the first and
+last region hit all stay in), so the assembly axis has no artificial holes.
 
 Each set ships in the atlas dropdown with a one-line blurb, and every
 example has a shareable tour GIF in [docs/media/](docs/media/)

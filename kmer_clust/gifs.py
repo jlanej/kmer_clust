@@ -8,6 +8,7 @@ Outputs land in docs/media/ (tracked, for the README) and out/figs/.
 Run: python -m kmer_clust.gifs
 """
 
+import colorsys
 import json
 
 import matplotlib
@@ -159,8 +160,18 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                    0.245 + (i % 3) * 0.022] for i, w in enumerate(windows)])
     F = np.array([[fine_x(w["_fine"]["ci"], w["_fine"]["mb"]), 0.10] for w in windows])
     STAGES = [A, B, C, F]
+    nq = len(windows)
+    # index paint: hue sweep first->last (blue -> purple -> orange, no green)
+    DCOL = [colorsys.hls_to_rgb(((215 + 165 * (i / (nq - 1) if nq > 1 else 0))
+                                 % 360) / 360, 0.50, 0.68) for i in range(nq)]
+    # Kendall tau: assembly order vs fine-axis position (ties count 0)
+    tau_s = sum(np.sign(F[j][0] - F[i][0]) if abs(F[j][0] - F[i][0]) > 5e-4 else 0
+                for i in range(nq) for j in range(i + 1, nq))
+    tau = tau_s / (nq * (nq - 1) / 2) if nq > 1 else 0.0
+    tauv = ("collinear" if tau >= 0.85 else "inverted" if tau <= -0.85 else
+            "mostly ordered" if abs(tau) >= 0.5 else "scrambled")
     LABELS = ["1 · assembly coordinates", "2 · word-space (T2T ghosted)",
-              "3 · loci on T2T", "4 · fine placement"]
+              "3 · loci on T2T", "4 · fine placement", "5 · world-lines"]
 
     gxy = ghost_xy * [0.9, 0.42] + [0.05, 0.33]
 
@@ -189,7 +200,12 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
             ax.plot([xm + 0.001, xm + 0.007], [0.108, 0.092], color=MUTED, lw=0.8)
         ax.text(0.05, 0.028, f"fine placement — {total:.0f} Mb of "
                 f"{n_bins*bin_bp/1e6:.0f} Mb shown ({zoom_x:.0f}× zoom), "
-                "bar height = exact Jaccard", fontsize=6.5, color=MUTED)
+                "bar height = exact Jaccard · assembly order "
+                f"τ {tau:+.2f} ({tauv})", fontsize=6.5, color=MUTED)
+        ax.text(A[0][0] - 0.008, 0.90, "1", fontsize=6.5, color=MUTED,
+                ha="right", va="center")
+        ax.text(A[-1][0] + 0.008, 0.90, str(nq), fontsize=6.5, color=MUTED,
+                ha="left", va="center")
         if stage >= 2 and salpha > 0.3:
             for i, w in enumerate(windows):
                 for li, l in enumerate(w["loci"]):
@@ -198,17 +214,25 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                                  ) / n_bins * 0.9
                     src = STAGES[min(stage, 2)][i] if stage == 2 else C[i]
                     ax.plot([src[0], lx], [src[1], 0.222],
-                            color=ACC, lw=0.5 if li else 0.9,
-                            alpha=(0.12 if li else 0.25) * salpha)
-        if stage == 3 and salpha > 0.3:
+                            color=DCOL[i], lw=0.5 if li else 0.9,
+                            alpha=(0.14 if li else 0.30) * salpha)
+        if stage >= 3 and salpha > 0.3:
             for i, w in enumerate(windows):
                 ax.plot([F[i][0], F[i][0]], [0.10, 0.10 + w["_fine"]["j"] * 0.09],
-                        color=ACC, lw=1.6, alpha=0.35 * salpha)
+                        color=DCOL[i], lw=1.6, alpha=0.45 * salpha)
 
-    def draw(pts, stage, salpha):
+    def draw(pts, stage, salpha, paths=0.0):
         def fn(ax):
             chrome(ax, stage, salpha)
-            ax.scatter(pts[:, 0], pts[:, 1], s=26, c=ACC, zorder=5,
+            if paths > 0.01:
+                for i in range(len(windows)):
+                    ax.plot([A[i][0], B[i][0], C[i][0], F[i][0]],
+                            [A[i][1], B[i][1], C[i][1], F[i][1]],
+                            color=DCOL[i], lw=1.0, alpha=0.30 * paths, zorder=4)
+                for S in (A, B, C):
+                    ax.scatter(S[:, 0], S[:, 1], s=7, c=DCOL,
+                               alpha=0.32 * paths, linewidths=0, zorder=4)
+            ax.scatter(pts[:, 0], pts[:, 1], s=26, c=DCOL, zorder=5,
                        edgecolors=SURFACE, linewidths=0.7)
         return fn
 
@@ -218,10 +242,17 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
         stage = si % 4
         for _ in range(9):
             frames.append(frame(draw(order[si], stage, 1.0)))
+        finale = stage == 3
+        if finale:  # world-lines: every path through all four stations at once
+            for f in range(1, 7):
+                frames.append(frame(draw(order[si], 4, 1.0, paths=ease(f / 6))))
+            for _ in range(14):
+                frames.append(frame(draw(order[si], 4, 1.0, paths=1.0)))
         for f in range(1, 12):
             t = ease(f / 12)
             frames.append(frame(draw(order[si] * (1 - t) + order[si + 1] * t,
-                                     stage, 1 - t)))
+                                     4 if finale else stage, 1 - t,
+                                     paths=(1 - t) if finale else 0.0)))
     save_gif(frames, out_path)
 
 
