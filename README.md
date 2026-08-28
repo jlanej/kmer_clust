@@ -295,7 +295,7 @@ skipping contigs already featured in another set.
 
 | set | contig | windows → top | median J | order τ |
 |---|---|---|---|---|
-| **HG002 pat** (the reference Y *is* his) | 13 Mb walk, chrY 6–19 | 88/89 → chrY | 0.36 | **−0.98** |
+| **HG002 pat** (the reference Y *is* HG002's) | 13 Mb walk, chrY 6–19 | 88/89 → chrY | 0.36 | **−0.98** |
 | **HG005 pat** (a different Y lineage) | 36 Mb walk, chrY 24–60 | 47/47 → chrY | 0.64 | +0.97 |
 
 ![HG002 chrY contig tour](docs/media/tour_y_hg002.gif)
@@ -308,9 +308,11 @@ window correctly anyway; the *order* readout is what exposes the flip,
 as a reversed color gradient. Its low J (0.36) is the ampliconic terrain:
 window-grid offset caps J for unique sequence and the draft's amplicon
 copies add real damage (satellite loci elsewhere on the same Y sit at
-~0.8, offset-immune). **HG005's contig walks 24–60 Mb of a different
-man's Y in order** (τ +0.97) at lower overlap — *divergence without
-disorder*. A multi-fragment variant that scaffolds *all* of a sample's Y
+~0.8, offset-immune). One window even three-way ties across a duplicon
+family shared with the acrocentric p-arms (chr14:2.9 / chr15:4.8 /
+chrY:11.3 Mb at J 0.35–0.40) — the acrocentric commons, seen from the Y. **HG005's contig walks 24–60 Mb of a
+different Y lineage in order** (τ +0.97) at lower overlap — *divergence
+without disorder*. A multi-fragment variant that scaffolds *all* of a sample's Y
 contigs by median placement gave τ +0.89 for both samples (and flagged
 the X-transposed region via windows landing at chrX ~90 Mb); the
 one-contig view is what ships, for clarity. Reproduce with
