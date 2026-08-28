@@ -45,8 +45,20 @@ SHOWCASES = [
      "the immunoglobulin heavy-chain locus — germline-variable between people (window J spans 0.25–0.95)"),
     ("def8p", "chr8", 6.5, 13.0, "8p23.1 defensins",
      "an inversion flanked by defensin-cluster segdups — the one showcase locus whose window order shuffles (τ +0.67)"),
+    ("smn", "chr5", 70.5, 71.8, "SMN1/SMN2 · 5q13",
+     "the SMA locus: 7 of 8 windows carry TWO strong chr5 homes ~0.9 Mb apart — the SMN1/SMN2 twin blocks (τ +0.54)"),
+    ("lcr22", "chr22", 19.2, 22.5, "22q11.2 · DiGeorge/VCFS",
+     "the DiGeorge microdeletion region — LCR22 segdups multi-map while the reverse-stored contig inverts the axis (τ −0.91)"),
     ("yq12", "chrY", 30.0, 60.0, "Yq12 heterochromatin",
      "the giant DYZ satellite ocean; CHM13's chrY IS HG002's — near-self control (J≈0.9, runner-ups elsewhere in Yq12)"),
+]
+# hand-cut contiguous contig walks (data-driven discoveries; windows of one
+# contig, chosen by a stated rule) — built by run_showcase when the scanned
+# haplotype contains the contig
+WALKS = [
+    ("cen13_hg002", "HG002#1#JAHKSE010000070.1", 944, 973,
+     "chr13 centromere entry",
+     "into the chr13 centromere: coverage crashes to 0.55 as personal HOR variants appear — the contig dies in the array"),
 ]
 TOP_HITS = 8
 
@@ -384,6 +396,24 @@ def whole_chrom_set(kit: Kit, results: list, sample: str, chrom: str = "chrY",
     return out
 
 
+def contig_walk_set(kit: Kit, by_contig: dict, sample: str, sid: str,
+                    contig: str, w0: int, w1: int, label: str,
+                    blurb: str) -> dict | None:
+    """A hand-cut contiguous walk of one contig (windows w0..w1)."""
+    ws = by_contig.get(contig)
+    if not ws:
+        return None
+    members = sorted(w for w in ws if w0 <= w <= w1)
+    if len(members) < 8:
+        return None
+    win = kit.params.bin_bp
+    windows = [window_entry(kit, contig, w, ws[w], w * win / 1e6)
+               for w in members]
+    print(f"  walk {sid}: {len(windows)} windows of {contig}")
+    return {"id": sid, "label": f"{sample} · {label}", "blurb": blurb,
+            "windows": windows}
+
+
 def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
     """Project a WHOLE haplotype and pull out the windows whose best exact
     locus lands in famous T2T regions — the projector locating landmarks in
@@ -450,6 +480,15 @@ def _write_projection(pj: dict) -> None:
 def run_showcase(fasta_path, sample: str, params: Params = PARAMS) -> None:
     kit = Kit(params)
     new_sets = showcase(kit, fasta_path, sample)
+    results = scan_haplotype(kit, fasta_path)
+    by_contig = {}
+    for n, w, r in results:
+        by_contig.setdefault(n, {})[w] = r
+    for sid, contig, w0, w1, label, blurb in WALKS:
+        st = contig_walk_set(kit, by_contig, sample, sid, contig, w0, w1,
+                             label, blurb)
+        if st:
+            new_sets.append(st)
     pj = json.loads((OUT / "projection.json").read_text())
     have = {s2["id"] for s2 in new_sets}
     pj["sets"] = [s2 for s2 in pj["sets"] if s2["id"] not in have] + new_sets
