@@ -1,0 +1,212 @@
+<!-- ============================================================
+     project: prototype panel — drop another assembly onto the map.
+     Three stations, morphed: the query in its own linear assembly
+     coordinates; its projection into the frozen word-space (the
+     T2T map as ghost); its best-guess loci back on T2T's line,
+     runner-up loci as echoes.
+
+     MODULAR: injected by site.py at its template marker only if
+     this file exists; delete the file to remove the feature.
+     Reads page globals (P, N, VIEWS, chromOff, css, toggleSel)
+     and needs no hooks in the main script.
+     ============================================================ -->
+<div class="bleed" id="prj-section">
+<h2>Projection <span class="t3d-proto">prototype</span></h2>
+<p class="lede" id="prj-lede">Any assembly can be sketched with the same lottery, matched against
+the frozen vocabulary, and dropped into this map — no aligner. Below: 4&nbsp;Mb slices of the hard
+chr21 acrocentric region from two HPRC samples (plus a CHM13 self-slice as control). Watch each
+window travel: its own <b>assembly</b> coordinates → its place in <b>word-space</b> → its best
+<b>loci on T2T</b>, with runner-up loci shown as echoes when the vocabulary genuinely belongs to
+several places. Hover a dot for its hits and how much of its vocabulary CHM13 even knows; click
+to light its loci up in the views above.</p>
+<div class="controls">
+  <select id="prj-set" class="selctl" title="which query assembly slice to project"></select>
+  <div class="seg" id="prj-stage" role="group" aria-label="projection stage">
+    <button data-s="0" aria-pressed="false" title="windows laid out in the query assembly's own coordinates">assembly</button>
+    <button data-s="1" aria-pressed="true" title="each window placed by its vocabulary among the T2T bins (ghosted)">word-space</button>
+    <button data-s="2" aria-pressed="false" title="each window's nearest T2T loci on the genome line — echoes are runner-up loci">T2T loci</button>
+  </div>
+  <button class="ghost" id="prj-tour" aria-pressed="false" title="cycle the three stages automatically">tour</button>
+</div>
+<div class="pane"><canvas id="prj" class="plot"></canvas></div>
+</div>
+<script>
+"use strict";
+document.addEventListener("DOMContentLoaded", () => {
+  const PR = P.projection;
+  const sec = document.getElementById("prj-section");
+  if (!PR || !PR.sets || !PR.sets.length){ sec.style.display="none"; return; }
+  const cv = document.getElementById("prj"), ctx = cv.getContext("2d");
+  const tip = document.getElementById("tooltip");
+  let W=0,H=0,DPR=1, ghost=null;
+  let setIdx=0, stage=1, t=1, from=null, anim=0, hover=-1;
+  const AXY=[], BXY=[], CXY=[];      // per-window positions per stage
+  let QS=[];                          // current set's windows
+
+  const st = PR.selftest||{};
+  if (st.easy) document.getElementById("prj-lede").innerHTML +=
+    ` Self-projection of offset T2T windows finds their own locus at ` +
+    `<b>${Math.round(st.easy.top1_acc*100)}%</b> (euchromatin) and ` +
+    `<b>${Math.round(st.hard.top1_acc*100)}%</b> (satellite/acrocentric) top-1.`;
+
+  const selEl=document.getElementById("prj-set");
+  PR.sets.forEach((s,i)=> selEl.append(new Option(s.label, i)));
+  selEl.onchange=()=>{ setIdx=+selEl.value; prep(); morph(stage,true); };
+
+  const MX=24, mapY0=64, mapH=()=>H-190, lineAY=30, lineCY=()=>H-64;
+  function size(){
+    const cand=[cv.getBoundingClientRect().width,
+                cv.parentElement.getBoundingClientRect().width-28, innerWidth-80, 1200];
+    const w=cand.find(x=>x>40);
+    const h=Math.max(360, Math.min(500, Math.round((innerHeight||800)*0.52)));
+    DPR=Math.min(devicePixelRatio||1,2);
+    cv.width=Math.round(w*DPR); cv.height=h*DPR; cv.style.height=h+"px";
+    W=w; H=h; ghost=null;
+  }
+  function mapPt(nx,ny){ return [MX+nx*(W-2*MX), mapY0+(1-ny)*mapH()]; }
+  function linePt(f,y){ return [MX+f*(W-2*MX), y]; }
+  function binGlobalFrac(chrom, startMb){
+    const ci=P.meta.chroms.indexOf(chrom);
+    if(ci<0) return 0;
+    return (chromOff[ci] + startMb*1e6/P.meta.bin_bp) / N;
+  }
+  function prep(){
+    QS=PR.sets[setIdx].windows.filter(w=>w.hits&&w.hits.length);
+    const maxMb=Math.max(...QS.map(w=>w.pos_mb))+0.1;
+    AXY.length=BXY.length=CXY.length=0;
+    const V0=VIEWS[0];
+    for(const w of QS){
+      AXY.push(linePt(w.pos_mb/maxMb, lineAY));
+      let sx=0, sy=0, sw=0;
+      for(const [h,s] of w.hits){ const wt=1/(1.0001-s);
+        sx+=V0.nx[h]*wt; sy+=V0.ny[h]*wt; sw+=wt; }
+      BXY.push(mapPt(sx/sw, sy/sw));
+      const l0=w.loci[0];
+      CXY.push(linePt(binGlobalFrac(l0.chrom,(l0.start_mb+l0.end_mb)/2), lineCY()));
+    }
+  }
+  function pos(i){
+    const to=[AXY,BXY,CXY][stage][i];
+    if(!from || t>=1) return to;
+    const f=from[i];
+    const e=t<0.5? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+    return [f[0]+(to[0]-f[0])*e, f[1]+(to[1]-f[1])*e];
+  }
+  function morph(s, jump){
+    for(const b of document.querySelectorAll("#prj-stage button"))
+      b.setAttribute("aria-pressed", +b.dataset.s===s);
+    from=QS.map((_,i)=>pos(i));
+    stage=s; t=jump?1:0;
+    if(!jump && matchMedia("(prefers-reduced-motion: reduce)").matches) t=1;
+    if(anim) cancelAnimationFrame(anim);
+    const t0=performance.now(), DUR=650;
+    const step=now=>{ t=Math.min(1,(now-t0)/DUR); draw();
+      if(t<1) anim=requestAnimationFrame(step); else anim=0; };
+    anim=requestAnimationFrame(step);
+  }
+  function drawGhost(c){
+    const V0=VIEWS[0], col=css("--noise");
+    c.fillStyle=col; c.globalAlpha=0.55;
+    for(let i=0;i<N;i++){ const [x,y]=mapPt(V0.nx[i],V0.ny[i]); c.fillRect(x-0.8,y-0.8,1.6,1.6); }
+    c.globalAlpha=1;
+  }
+  function draw(){
+    if(!W) size();
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.clearRect(0,0,W,H);
+    if(!ghost){ ghost=document.createElement("canvas");
+      ghost.width=cv.width; ghost.height=cv.height;
+      const g=ghost.getContext("2d"); g.setTransform(DPR,0,0,DPR,0,0); drawGhost(g); }
+    ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(ghost,0,0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    const muted=css("--muted"), ink=css("--ink"), acc="#3987e5";
+    // assembly line (top)
+    ctx.strokeStyle=muted; ctx.globalAlpha=0.5;
+    ctx.beginPath(); ctx.moveTo(MX,lineAY); ctx.lineTo(W-MX,lineAY); ctx.stroke();
+    ctx.globalAlpha=0.7; ctx.fillStyle=muted; ctx.font="10px 'IBM Plex Mono',monospace";
+    ctx.fillText(PR.sets[setIdx].label+" — assembly coordinates", MX, lineAY-10);
+    // T2T line (bottom) with chromosome ticks
+    const yC=lineCY();
+    ctx.beginPath(); ctx.moveTo(MX,yC); ctx.lineTo(W-MX,yC); ctx.stroke();
+    for(let ci=0;ci<P.meta.chroms.length;ci++){
+      const f=chromOff[ci]/N, [x]=linePt(f,yC);
+      ctx.globalAlpha=0.4; ctx.beginPath(); ctx.moveTo(x,yC-4); ctx.lineTo(x,yC+4); ctx.stroke();
+      if(P.meta.chrom_nbins[ci]/N*(W-2*MX)>26){
+        ctx.globalAlpha=0.65;
+        ctx.fillText(P.meta.chroms[ci].replace("chr",""),
+          MX+(chromOff[ci]+P.meta.chrom_nbins[ci]/2)/N*(W-2*MX)-4, yC+16); }
+    }
+    ctx.globalAlpha=0.7;
+    ctx.fillText("T2T-CHM13 genome line", MX, yC+30);
+    ctx.globalAlpha=1;
+    // connectors + echoes for the active stage
+    for(let i=0;i<QS.length;i++){
+      const w=QS[i], [x,y]=pos(i);
+      if(stage===1 && t>0.6){
+        ctx.strokeStyle=acc; ctx.globalAlpha=0.25*(hover===i?2.5:1);
+        const V0=VIEWS[0];
+        for(const [h] of w.hits.slice(0, hover===i?5:1)){
+          const [hx,hy]=mapPt(V0.nx[h],V0.ny[h]);
+          ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(hx,hy); ctx.stroke(); }
+        ctx.globalAlpha=1;
+      }
+      if(stage===2 && t>0.6 && w.loci.length>1){
+        for(const l of w.loci.slice(1)){
+          const [ex,ey]=linePt(binGlobalFrac(l.chrom,(l.start_mb+l.end_mb)/2), yC);
+          ctx.strokeStyle=acc; ctx.globalAlpha=0.18;
+          ctx.beginPath(); ctx.moveTo(x,y-6); ctx.quadraticCurveTo((x+ex)/2,y-26,ex,ey-6); ctx.stroke();
+          ctx.fillStyle=acc; ctx.globalAlpha=0.35;
+          ctx.beginPath(); ctx.arc(ex,ey,3,0,7); ctx.fill();
+          ctx.globalAlpha=1;
+        }
+      }
+    }
+    // query dots
+    for(let i=0;i<QS.length;i++){
+      const [x,y]=pos(i);
+      ctx.fillStyle=acc;
+      ctx.beginPath(); ctx.arc(x,y,hover===i?6:4.2,0,7); ctx.fill();
+      ctx.strokeStyle=css("--card"); ctx.lineWidth=1.2; ctx.stroke();
+    }
+  }
+  cv.addEventListener("pointermove", e=>{
+    const r=cv.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    let best=-1,bd=140;
+    for(let i=0;i<QS.length;i++){ const [x,y]=pos(i);
+      const d=(x-mx)*(x-mx)+(y-my)*(y-my);
+      if(d<bd){bd=d;best=i;} }
+    hover=best; draw();
+    if(best<0){ tip.style.display="none"; return; }
+    const w=QS[best];
+    tip.innerHTML=`<div class="loc">${w.label}</div>`+
+      `<div class="row">CHM13 knows <b>${Math.round(w.cover*100)}%</b> of its vocabulary</div>`+
+      w.loci.map((l,li)=>`<div class="row">${li? "also: ":"best: "}<b>${l.chrom}:${l.start_mb}–${l.end_mb} Mb</b> · exact J <b>${l.sim.toFixed(3)}</b></div>`).join("");
+    tip.style.display="block";
+    const tw=tip.offsetWidth, th=tip.offsetHeight;
+    tip.style.left=Math.min(innerWidth-tw-10,e.clientX+14)+"px";
+    tip.style.top=Math.max(8,Math.min(innerHeight-th-10,e.clientY+14))+"px";
+  });
+  cv.addEventListener("pointerleave", ()=>{ hover=-1; tip.style.display="none"; draw(); });
+  cv.addEventListener("click", ()=>{
+    if(hover<0) return;
+    const w=QS[hover];
+    const mask=new Uint8Array(N); let k=0;
+    for(const l of w.loci) for(const b of l.bins){ if(!mask[b]){mask[b]=1;k++;} }
+    if(k) toggleSel({type:"bins", mask, n:k});
+  });
+  document.querySelectorAll("#prj-stage button").forEach(b=>
+    b.onclick=()=>morph(+b.dataset.s,false));
+  let tour=0;
+  document.getElementById("prj-tour").onclick=function(){
+    if(tour){ clearInterval(tour); tour=0; this.setAttribute("aria-pressed","false"); return; }
+    this.setAttribute("aria-pressed","true");
+    morph(0,false);
+    tour=setInterval(()=>morph((stage+1)%3,false), 1800);
+  };
+  addEventListener("resize", ()=>{ clearTimeout(size._t);
+    size._t=setTimeout(()=>{ size(); prep(); draw(); },150); });
+  size(); prep(); draw();
+  window.__prjDraw=draw; window.__prjMorph=morph;
+});
+</script>

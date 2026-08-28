@@ -221,6 +221,10 @@ def build_payload(params: Params) -> dict:
         "bin_mb": params.pairwise_bin_bp // 1_000_000,
     }
 
+    proj_path = OUT / "projection.json"
+    if proj_path.exists():
+        payload["projection"] = json.loads(proj_path.read_text())
+
     payload["figs"] = {
         name: png_b64(OUT / "figs" / f"{name}.png")
         for name in ("confusions", "sweep", "ab_agreement", "seeds")
@@ -245,6 +249,10 @@ def run(params: Params) -> None:
     frag = TEMPLATE.parent / "atlas3d.html"
     html = html.replace(
         "<!--__ATLAS3D__-->", frag.read_text() if frag.exists() else ""
+    )
+    frag2 = TEMPLATE.parent / "project.html"
+    html = html.replace(
+        "<!--__PROJECT__-->", frag2.read_text() if frag2.exists() else ""
     )
     DOCS.mkdir(exist_ok=True)
     out = DOCS / "index.html"

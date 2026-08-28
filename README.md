@@ -205,6 +205,25 @@ Two additions keep the build annotation-agnostic while articulating the map:
 - RepeatMasker 4.1.2p1 BED: read from a sibling `kmer_dust/data/cache/` checkout
   if present; optional (TE fractions are skipped without it)
 
+## Projection (prototype)
+
+`project.py` (`make project`) freezes the model — shared-hash universe, IDF,
+SVD basis — and drops any assembly's 100 kb windows onto the map with **two
+signals on purpose**: model cosine in the shared-vocabulary space places a
+window in word-space (its dialect neighborhood), while **exact sketch Jaccard
+against the full store** (private words included) decides its loci — because
+euchromatic locus identity lives precisely in the private vocabulary the
+model excludes. Self-projection of 50 kb-offset T2T windows: **97% top-1 /
+99% top-3** on euchromatin and 70% / 92% on satellite+acrocentric (residue =
+within-array ties), with cosine alone managing only 30% — the gap is the
+point. Projected 4 Mb chr21-acrocentric slices of HG00097 (both haplotypes)
+and NA19909: the CHM13 control maps 40/40 windows to chr21, while the HPRC
+haplotypes send 20–70% of their windows to chr13/chr14 as best exact home —
+the pan-acrocentric commons, measured per window, with runner-up loci and
+vocabulary coverage (95–98%) carrying the ambiguity. The atlas gains a
+morphing panel: assembly coordinates → word-space placement → T2T loci
+(echoes = runner-up loci); modular as `project.html`, delete to remove.
+
 ## Deliberately out of scope
 
 HPRC assemblies (that's kmer_dust's job), gene annotation, alignment baselines,

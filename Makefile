@@ -5,7 +5,7 @@ PY := .venv/bin/python
 all:
 	$(PY) -m kmer_clust all
 
-sketch matrix embed pairwise annotate analyze periods figures site:
+sketch matrix embed pairwise annotate analyze periods project figures site:
 	$(PY) -m kmer_clust $@
 
 test:
