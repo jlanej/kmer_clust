@@ -284,35 +284,36 @@ acrocentric commons, now measurable as lost ordering.
 Each set is one *contiguous* assembly segment (windows between the first and
 last region hit all stay in), so the assembly axis has no artificial holes.
 
-### chrY end-to-end: scaffolding a fragmented chromosome
+### chrY, one contig per sample
 
 The year-1 HiFi drafts have no continuous chrY — palindromes and satellite
-arrays break it into pieces. The whole-chromosome sets take every contig
-with ≥ 5 chrY-hitting windows and concatenate them **in the order of their
-median placement**: the projector scaffolding an assembly's Y fragments
-onto the reference by vocabulary alone (break glyphs mark real contig
-junctions; the axis note reports fragments kept, scraps omitted, and
-window thinning).
+arrays break it into pieces (HG002's Y arrives as 34 contigs totalling
+~51 Mb against the reference's 62.5; the missing ~11 Mb is collapsed
+satellite). So each sample shows its single most informative Y contig,
+picked by a fixed rule: most windows × widest reference span walked,
+skipping contigs already featured in another set.
 
-| set | fragments | windows → top | median J | order τ |
+| set | contig | windows → top | median J | order τ |
 |---|---|---|---|---|
-| **HG002 pat** (the reference Y *is* his) | 19 of 34 | 118/120 → chrY, 2 → chrX | 0.78 | +0.91 |
-| **HG005 pat** (a different Y lineage) | 20 of 32 | 120/120 → chrY | 0.59 | +0.92 |
+| **HG002 pat** (the reference Y *is* his) | 13 Mb walk, chrY 6–19 | 88/89 → chrY | 0.36 | **−0.98** |
+| **HG005 pat** (a different Y lineage) | 36 Mb walk, chrY 24–60 | 47/47 → chrY | 0.64 | +0.97 |
 
-![HG002 chrY end-to-end tour](docs/media/tour_y_hg002.gif)
+![HG002 chrY contig tour](docs/media/tour_y_hg002.gif)
 
-Two findings ride along. **HG002 vs the reference is a draft-vs-finished
-diagnostic**: T2T-Y is the *finished* HG002 Y (ultralong + curation), the
-HPRC file a 2021 HiFi draft — so J splits by terrain (satellite loci 0.82,
-offset-immune, vs non-satellite 0.41, where window-grid offset caps J and
-the ampliconic regions add real draft damage), the two chrX landings sit
-at ~90 Mb — the X-transposed region — and the τ deficit is *concentrated*:
-one fragment's windows walk backward along the reference (chrY 19 → 17 Mb),
-the classic palindrome-arm orientation ambiguity of draft Y assemblies.
-The draft's Y totals ~51 Mb against the reference's 62.5 — the missing
-~11 Mb is collapsed satellite. **HG005 then isolates divergence**: a
-different man's Y drops vocabulary overlap (J 0.59 vs 0.78) while τ holds
-at +0.92 — *order survives divergence; overlap doesn't.* Reproduce with
+Each row is a one-line finding. **HG002's contig walks the reference
+almost perfectly backward** (τ −0.98): the draft stored this ampliconic
+contig in reverse orientation — contig strand is arbitrary — and because
+sketches use canonical k-mers, placement is strand-blind and lands every
+window correctly anyway; the *order* readout is what exposes the flip,
+as a reversed color gradient. Its low J (0.36) is the ampliconic terrain:
+window-grid offset caps J for unique sequence and the draft's amplicon
+copies add real damage (satellite loci elsewhere on the same Y sit at
+~0.8, offset-immune). **HG005's contig walks 24–60 Mb of a different
+man's Y in order** (τ +0.97) at lower overlap — *divergence without
+disorder*. A multi-fragment variant that scaffolds *all* of a sample's Y
+contigs by median placement gave τ +0.89 for both samples (and flagged
+the X-transposed region via windows landing at chrX ~90 Mb); the
+one-contig view is what ships, for clarity. Reproduce with
 `python -m kmer_clust.project ychrom <assembly.fa.gz> "<label>"`.
 
 Each set ships in the atlas dropdown with a one-line blurb, and every

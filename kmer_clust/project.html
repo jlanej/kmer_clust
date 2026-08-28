@@ -253,14 +253,16 @@ document.addEventListener("DOMContentLoaded", () => {
         ctx.beginPath(); ctx.moveTo(bx-4,lineAY+5); ctx.lineTo(bx,lineAY-5); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(bx,lineAY+5); ctx.lineTo(bx+4,lineAY-5); ctx.stroke();
       }
-      ctx.globalAlpha=0.65;
+    }
+    {
       const S0=PR.sets[setIdx];
-      let note=`${S0.n_frags||ABRK.length+1}`+
+      const parts=[];
+      if (ABRK.length) parts.push(`${S0.n_frags||ABRK.length+1}`+
         (S0.n_frags_all>S0.n_frags? ` of ${S0.n_frags_all}`:"")+
-        ` assembly fragments, ordered by their placement`;
-      if (S0.scrap_mb) note+=` · ${S0.scrap_mb} Mb of scraps omitted`;
-      if (S0.n_win_all>QS.length) note+=` · showing ${QS.length} of ${S0.n_win_all} windows`;
-      ctx.fillText(note, MX, lineAY+16);
+        ` assembly fragments, ordered by their placement`+
+        (S0.scrap_mb? ` · ${S0.scrap_mb} Mb of scraps omitted`:""));
+      if (S0.n_win_all>QS.length) parts.push(`showing ${QS.length} of ${S0.n_win_all} windows`);
+      if (parts.length){ ctx.globalAlpha=0.65; ctx.fillText(parts.join(" · "), MX, lineAY+16); }
     }
     if (!zoom){
       // loci line (plain) + fine axis (ticked, labeled)

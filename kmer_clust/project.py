@@ -338,59 +338,50 @@ def window_entry(kit: Kit, contig: str, w: int, r: dict, pos_mb: float) -> dict:
 
 
 def whole_chrom_set(kit: Kit, results: list, sample: str, chrom: str = "chrY",
-                    sid: str = "", blurb: str = "", min_frag: int = 5,
-                    cap: int = 120) -> dict | None:
-    """The whole-chromosome showcase: every contig with >= min_frag windows
-    whose best exact locus is on `chrom` becomes a fragment; fragments are
-    concatenated in the order of their median placement — the projector
-    SCAFFOLDING an assembly's pieces onto the reference by vocabulary alone.
-    Over `cap` windows the set is thinned uniformly (span kept, ends kept)."""
+                    sid: str = "", blurb: str = "", min_hits: int = 15,
+                    cap: int = 120, exclude: set | None = None) -> dict | None:
+    """One-contig chromosome example, same shape as the region showcases:
+    among contigs with >= min_hits windows whose best exact locus is on
+    `chrom` (skipping contigs already featured in another set), pick the one
+    maximizing hits x reference-span walked, and show its contiguous span."""
     cm = (kit.bins["chrom"] == chrom).to_numpy()
     lo_b, hi_b = int(np.flatnonzero(cm).min()), int(np.flatnonzero(cm).max())
     win = kit.params.bin_bp
     by_contig = {}
     for n, w, r in results:
         by_contig.setdefault(n, {})[w] = r
-    frags = []
-    n_frags_all, scrap_win = 0, 0
+    best = None  # (hits x ref-span score, contig, hit windows, span)
     for n, ws in by_contig.items():
-        hits = [w for w, r in ws.items() if lo_b <= r["ehits"][0] <= hi_b]
-        if hits:
-            n_frags_all += 1
-        if len(hits) < min_frag:
-            scrap_win += len(hits)
+        if exclude and n in exclude:
             continue
-        lo, hi = min(hits), max(hits)
-        members = sorted(w for w in ws if lo <= w <= hi)
-        med = float(np.median([(ws[w]["ehits"][0] - lo_b) * win / 1e6
-                               for w in hits]))
-        frags.append((med, n, members))
-    if not frags:
-        print(f"  (whole-{chrom}: no fragments with >= {min_frag} windows)")
+        hits = [w for w, r in ws.items() if lo_b <= r["ehits"][0] <= hi_b]
+        if len(hits) < min_hits:
+            continue
+        mbs = [(ws[w]["ehits"][0] - lo_b) * win / 1e6 for w in hits]
+        span0 = max(mbs) - min(mbs)
+        key = span0 * len(hits)
+        if best is None or key > best[0]:
+            best = (key, n, hits, span0)
+    if best is None:
+        print(f"  (whole-{chrom}: no contig with >= {min_hits} hits)")
         return None
-    frags.sort()
-    GAPMB = 0.4
-    windows, breaks, off = [], [], 0.0
-    for fi, (med, n, members) in enumerate(frags):
-        base = members[0]
-        for w in members:
-            windows.append(window_entry(kit, n, w, by_contig[n][w],
-                                        off + (w - base) * win / 1e6))
-        off += (members[-1] - base + 1) * win / 1e6
-        if fi < len(frags) - 1:
-            breaks.append(round(off + GAPMB / 2, 2))
-            off += GAPMB
-    n_all = len(windows)
+    _, dom, hits, span = best
+    lo, hi = min(hits), max(hits)
+    members = sorted(w for w in by_contig[dom] if lo <= w <= hi)
+    n_all = len(members)
     if n_all > cap:
         idx = np.unique(np.linspace(0, n_all - 1, cap).round().astype(int))
-        windows = [windows[i] for i in idx]
-    label = f"{sample} · {chrom} end-to-end"
-    print(f"  whole-{chrom}: {len(frags)} fragments, {n_all} windows"
-          f"{f' (thinned to {len(windows)})' if n_all > cap else ''}")
-    return {"id": sid or f"y_{sample.split()[0].lower()}", "label": label,
-            "blurb": blurb, "windows": windows, "breaks": breaks,
-            "n_frags": len(frags), "n_frags_all": n_frags_all,
-            "scrap_mb": round(scrap_win * win / 1e6, 1), "n_win_all": n_all}
+        members = [members[i] for i in idx]
+    windows = [window_entry(kit, dom, w, by_contig[dom][w], w * win / 1e6)
+               for w in members]
+    label = f"{sample} · chrY contig ({span:.0f} Mb walk)"
+    print(f"  whole-{chrom}: {dom} — {len(windows)} windows"
+          f"{f' of {n_all}' if n_all > cap else ''}, walks {span:.0f} Mb")
+    out = {"id": sid or f"y_{sample.split()[0].lower()}", "label": label,
+           "blurb": blurb, "windows": windows}
+    if n_all > cap:
+        out["n_win_all"] = n_all
+    return out
 
 
 def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
@@ -470,10 +461,15 @@ def run_ychrom(fasta_path, sample: str, blurb: str = "",
                params: Params = PARAMS) -> None:
     kit = Kit(params)
     results = scan_haplotype(kit, fasta_path)
-    st = whole_chrom_set(kit, results, sample, "chrY", blurb=blurb)
+    pj = json.loads((OUT / "projection.json").read_text())
+    sid = f"y_{sample.split()[0].lower()}"
+    used = {w["label"].rsplit(":", 1)[0]
+            for s2 in pj["sets"] if s2["id"] != sid
+            for w in s2["windows"]}
+    st = whole_chrom_set(kit, results, sample, "chrY", blurb=blurb,
+                         exclude=used)
     if st is None:
         return
-    pj = json.loads((OUT / "projection.json").read_text())
     pj["sets"] = [s2 for s2 in pj["sets"] if s2["id"] != st["id"]] + [st]
     _write_projection(pj)
     print(f"projection.json now holds {len(pj['sets'])} sets")
