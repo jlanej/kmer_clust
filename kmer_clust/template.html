@@ -118,6 +118,9 @@ canvas.plot{width:100%;display:block;border-radius:8px;cursor:crosshair;
 .fig img{width:100%;border-radius:8px;display:block;background:#fcfcfb}
 .fig .cap{font-size:12.5px;color:var(--ink2);margin-top:9px;line-height:1.5}
 .fig .cap b{color:var(--ink)}
+#clpanel{margin:2px 0 14px}
+#clpanel .tablewrap{max-height:340px;overflow:auto;margin-top:6px}
+#clpanel th{position:sticky;top:0;background:var(--card);z-index:1}
 .tablewrap{overflow-x:auto;background:var(--card);border:1px solid var(--hair);
   border-radius:14px;box-shadow:var(--shadow)}
 table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:760px}
@@ -180,6 +183,10 @@ that word length, layouts Procrustes-aligned so the morph shows structure, not s
   <button class="ghost" id="clearsel" hidden>clear selection</button>
 </div>
 <div class="legend" id="legend"></div>
+<div id="clpanel" hidden>
+  <p style="font-size:13px;color:var(--muted);margin:2px 0 0" id="clpanel-note"></p>
+  <div class="tablewrap"><table id="ctable"></table></div>
+</div>
 <div class="panes">
   <div class="pane">
     <h3>The map</h3>
@@ -258,14 +265,6 @@ HOR families. A method that secretly encodes position would ace both; one blind 
 would fail the first.</p>
 <div class="metric-strip" id="metrics" style="margin:18px 0 24px"></div>
 <div class="figgrid" id="figs"></div>
-
-<h2>The clusters</h2>
-<p class="lede" id="cluster-lede"></p>
-<div class="controls">
-  <select id="tbl-jump" class="selctl" title="the full suite of clusters, largest first — picking one toggles it into the selection (pick several to compare)"></select>
-  <button class="ghost" id="tbl-toggle" title="expand the table to every cluster, or collapse back to the prevalent ones"></button>
-</div>
-<div class="tablewrap"><table id="ctable"></table></div>
 
 <h2>Method</h2>
 <figure class="methodfig">
@@ -498,7 +497,7 @@ const ramp = t => { const [lo,hi] = isDark()? RAMP_D : RAMP; return rampColor(t,
 
 /* ---------- color modes ---------- */
 const MODES = [
-  {id:"cluster",  label:"cluster", tip:"HDBSCAN clusters from the k=21 model (grey = noise). Cluster identity stays fixed across all embedding views."},
+  {id:"cluster",  label:"cluster", tip:"HDBSCAN clusters from the k=21 model (grey = noise). Cluster identity stays fixed across all embedding views. The last chip opens the full sortable table."},
   {id:"censat",   label:"satellite class", tip:"T2T censat v2.1 satellite families — annotation colors the map, it never builds it"},
   {id:"chrom",    label:"chromosome", tip:"chromosome identity — outside satellites the map should NOT sort by this"},
   {id:"gc",       label:"GC", tip:"GC content per bin (a one-dimensional shadow of composition)"},
@@ -911,7 +910,13 @@ function buildLegend(){
     for (const r of rows) el.appendChild(chip(clColor[r.cluster], r.cluster+" · "+r.name,
       sel&&sel.type==="cluster"&&sel.ids.has(r.cluster),
       ()=>toggleIdSel("cluster", r.cluster, true)));
-    el.appendChild(chip(css("--noise"),"noise",false,()=>{}));
+    const b=chip(css("--noise"),
+      (clOpen?"hide the":"all")+" "+P.clusters.table.length+" clusters "+(clOpen?"▴":"▾"),
+      clOpen, ()=>{ clOpen=!clOpen; buildLegend();
+        if (clOpen){ const f=tbl.querySelector("tr.sel");
+          if (f) f.scrollIntoView({block:"nearest"}); } });
+    b.title="every cluster (noise included) as a sortable table — click rows to select";
+    el.appendChild(b);
   } else if (mode==="censat"){
     for (const c of CEN){ if(c==="non_sat") continue;
       if (!(c in cenColor)) continue;
@@ -943,7 +948,9 @@ function buildLegend(){
     for(let x=0;x<140;x++){ ctx.fillStyle=ramp(x/139); ctx.fillRect(x,0,1,10); }
     g.append(lab[0], cv, lab[1]); el.appendChild(g);
   }
+  syncClPanel();
 }
+let clOpen=false;
 function syncLegend(){ buildLegend(); }
 
 /* ---------- annotated scorecard (in the trust section) ---------- */
@@ -975,32 +982,32 @@ document.getElementById("params").innerHTML = [
 ].map(([a,b])=>`<div><span>${a}</span><span>${b}</span></div>`).join("");
 document.getElementById("eb-k").textContent = "k = "+P.meta.k;
 
-/* ---------- cluster table ---------- */
+/* ---------- cluster table (inline panel under the legend) ---------- */
 const tbl=document.getElementById("ctable");
 let sortKey="n_bins", sortDir=-1;
 const COLS=[["cluster","#"],["name","name"],["n_bins","bins"],["mb","Mb"],
   ["dom_class","dominant class"],["dom_class_frac","purity"],
   ["n_chroms","chroms"],["gc","GC"],["sd_frac","segdup"],["private_frac","private"]];
-let tableAll=false;
-const TOP_N=15;
-const topIds=new Set([...P.clusters.table].sort((a,b)=>b.n_bins-a.n_bins)
-  .slice(0,TOP_N).map(r=>r.cluster));
+const NOISE_N = cluster.reduce((a,c)=>a+(c<0), 0);
+const NOISE_ROW = {cluster:-1, name:"noise — belongs to no crowd", n_bins:NOISE_N,
+  mb:Math.round(NOISE_N*P.meta.bin_bp/1e6), dom_class:"—", dom_class_frac:NaN,
+  n_chroms:NaN, gc:NaN, sd_frac:NaN, private_frac:NaN};
+const pct=v=> Number.isNaN(v)? "—" : Math.round(v*100)+"%";
 function drawTable(){
   const selIds = (sel&&sel.type==="cluster")? sel.ids : new Set();
-  const rows=[...P.clusters.table]
-    .filter(r=> tableAll || topIds.has(r.cluster) || selIds.has(r.cluster))
+  const rows=[...P.clusters.table, NOISE_ROW]
     .sort((a,b)=>{
       const va=a[sortKey],vb=b[sortKey];
-      return (typeof va==="string"? va.localeCompare(vb) : va-vb)*sortDir; });
+      return (typeof va==="string"? va.localeCompare(vb) : (va||0)-(vb||0))*sortDir; });
   tbl.innerHTML = "<thead><tr>"+COLS.map(([k,l])=>
     `<th data-k="${k}">${l}${k===sortKey?(sortDir<0?" ↓":" ↑"):""}</th>`).join("")+"</tr></thead>"+
     "<tbody>"+rows.map(r=>`<tr data-c="${r.cluster}" class="${selIds.has(r.cluster)?'sel':''}">
-      <td><span class="sw" style="background:${clColor[r.cluster]}"></span>${r.cluster}</td>
+      <td><span class="sw" style="background:${r.cluster<0?css("--noise"):clColor[r.cluster]}"></span>${r.cluster<0?"·":r.cluster}</td>
       <td style="color:var(--ink)">${r.name}</td>
       <td>${r.n_bins.toLocaleString()}</td><td>${r.mb.toLocaleString()}</td>
-      <td>${r.dom_class}</td><td>${Math.round(r.dom_class_frac*100)}%</td>
-      <td>${r.n_chroms}</td><td>${Math.round(r.gc*100)}%</td>
-      <td>${Math.round(r.sd_frac*100)}%</td><td>${Math.round(r.private_frac*100)}%</td>
+      <td>${r.dom_class}</td><td>${pct(r.dom_class_frac)}</td>
+      <td>${Number.isNaN(r.n_chroms)?"—":r.n_chroms}</td><td>${pct(r.gc)}</td>
+      <td>${pct(r.sd_frac)}</td><td>${pct(r.private_frac)}</td>
     </tr>`).join("")+"</tbody>";
   tbl.querySelectorAll("th").forEach(th=> th.onclick=()=>{
     const k=th.dataset.k;
@@ -1008,27 +1015,17 @@ function drawTable(){
     drawTable(); });
   tbl.querySelectorAll("tbody tr").forEach(tr=> tr.onclick=()=>
     toggleIdSel("cluster", +tr.dataset.c, true));
-  const tb=document.getElementById("tbl-toggle");
-  tb.textContent = tableAll
-    ? `show the ${TOP_N} prevalent`
-    : `show all ${P.clusters.table.length} clusters`;
 }
-function syncTable(){ drawTable(); }
-document.getElementById("tbl-toggle").onclick=()=>{ tableAll=!tableAll; drawTable(); };
-{
-  const jump=document.getElementById("tbl-jump");
-  jump.append(new Option("select clusters…", ""));
-  [...P.clusters.table].sort((a,b)=>b.n_bins-a.n_bins).forEach(r=>
-    jump.append(new Option(`${r.cluster} · ${r.name} (${r.n_bins.toLocaleString()} bins)`, r.cluster)));
-  jump.onchange=()=>{
-    if (jump.value!==""){ toggleIdSel("cluster", +jump.value, true); jump.value=""; }
-  };
+function syncTable(){ if (clOpen) drawTable(); }
+function syncClPanel(){
+  const p=document.getElementById("clpanel");
+  p.hidden = !clOpen || mode!=="cluster";
+  if (!p.hidden) drawTable();
 }
-document.getElementById("cluster-lede").textContent =
-  `${P.clusters.table.length} clusters, named by their dominant annotation after the fact — the ` +
-  `${TOP_N} most prevalent are listed; the selector reaches the rest. Click rows, legend chips, ` +
-  `or the selector to toggle several clusters at once (shift-click dots on the map does the same); ` +
-  `everything selected lights up together in the map, the territory, and the thread.`;
+document.getElementById("clpanel-note").textContent =
+  `all ${P.clusters.table.length} clusters (and noise), named by their dominant annotation ` +
+  `after the fact. Click rows to toggle several at once; sort by any column; ` +
+  `everything selected lights up in the map, the territory, and the thread.`;
 
 /* ---------- heatmap ---------- */
 const heat=document.getElementById("heat"), hctx=heat.getContext("2d");
