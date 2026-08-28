@@ -254,9 +254,33 @@ most of this haplotype's "chr21" slice finds its best exact home on
 CHM13's chr13.* (Control: [tour_chm13_slice.gif](docs/media/tour_chm13_slice.gif),
 one contiguous chr21 segment at 395×.)
 
+### Showcase: famous loci, fished out of a whole haplotype
+
+To stress the projector beyond one slice, the entire HG002 paternal
+assembly (HPRC year-1, 29,337 windows of 100 kb) was projected in ~5 min,
+and windows whose best **exact** locus falls in a famous T2T region were
+pulled out — no alignment, no assembly annotation, the projector locating
+landmarks by vocabulary alone. Five made the cut, and their exact-Jaccard
+levels read as a divergence dial across locus biology:
+
+| set | windows → top chrom | median J | what it shows |
+|---|---|---|---|
+| **Yq12 heterochromatin** | 44/44 → chrY | 0.90 | CHM13's chrY *is* HG002's — a near-self control; runner-up loci are other spots inside the same satellite ocean |
+| **IGH** (chr14) | 13/13 → chr14 | 0.87 | germline-variable between people; window J spans 0.25–0.95 |
+| **MHC / HLA** (chr6) | 44/44 → chr6 | 0.63 | the genome's most polymorphic region — divergent in sequence, colinear in structure, so every window still lands home |
+| **8p23.1 defensins** | 44/44 → chr8 | 0.57 | inversion flanked by copy-number-variable segdup clusters |
+| **MAPT / 17q21.31** | 15/15 → chr17 | 0.35 | the H1/H2 inversion polymorphism — most word-divergent locus here, yet placed exactly |
+
+Each set ships in the atlas dropdown with a one-line blurb, and every
+example has a shareable tour GIF in [docs/media/](docs/media/)
+(e.g. [tour_mhc.gif](docs/media/tour_mhc.gif),
+[tour_yq12.gif](docs/media/tour_yq12.gif)). Reproduce with
+`python -m kmer_clust.project showcase <assembly.fa.gz> "<label>"`.
+
 ## Deliberately out of scope
 
-HPRC assemblies (that's kmer_dust's job), gene annotation, alignment baselines,
-multi-k sweeps, Snakemake/HPC. Future fun that the store already supports:
-order-aware readouts (hash positions recover HOR periodicity), multiple k from
-re-sketch, cross-assembly projection.
+Clustering HPRC assemblies themselves (that's kmer_dust's job — here they
+only *project* onto the frozen CHM13 map), gene annotation, alignment
+baselines, Snakemake/HPC. Future fun that the store already supports:
+more order-aware readouts beyond periodicity, projection at finer window
+sizes, panels of many haplotypes per locus.

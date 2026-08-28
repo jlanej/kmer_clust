@@ -18,7 +18,10 @@
 <h2>Projection <span class="t3d-proto">prototype</span></h2>
 <p class="lede" id="prj-lede">Any assembly can be sketched with the same lottery, matched against
 the frozen vocabulary, and dropped onto this map — no aligner. Below: 4&nbsp;Mb slices of the hard
-chr21 acrocentric region from two HPRC samples (plus a CHM13 self-slice as control). Each window
+chr21 acrocentric region from two HPRC samples (plus a CHM13 self-slice as control), and a
+<b>showcase</b> fished out of the whole HG002 paternal assembly (29,337 windows projected, ~10 ms
+each): windows whose best exact locus falls in a famous region — MHC, MAPT, IGH, the 8p23.1
+defensins, Yq12 — found by vocabulary alone. Each set's one-liner appears under the picker. Each window
 travels four stations: its own <b>assembly</b> coordinates → its place in <b>word-space</b> →
 its <b>loci on T2T</b> (a solid stem to its best locus, thinner stems to runner-ups — one origin,
 all its homes) → <b>fine placement</b>, a second genome axis where every window lands at once at
@@ -38,6 +41,7 @@ pinned window. Hover for hits and vocabulary coverage.</p>
   <button class="ghost" id="prj-zoom" aria-pressed="false" disabled title="per-locus detail for the pinned window: member bins as exact-J bars and the weighted landing point (pin a window first)">zoom locus</button>
   <button class="ghost" id="prj-tour" aria-pressed="false" title="cycle the four stages automatically">tour</button>
 </div>
+<p class="sub" id="prj-blurb" style="margin:-4px 0 10px;max-width:100ch"></p>
 <div class="pane"><canvas id="prj" class="plot"></canvas></div>
 </div>
 <script>
@@ -63,10 +67,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const selEl=document.getElementById("prj-set");
   PR.sets.forEach((s,i)=> selEl.append(new Option(s.label, i)));
+  const blurbEl=document.getElementById("prj-blurb");
+  function syncBlurb(){ blurbEl.textContent = PR.sets[setIdx].blurb || ""; }
   selEl.onchange=()=>{
     if(anim){ cancelAnimationFrame(anim); anim=0; }
     from=null; hover=-1; t=1;
-    setIdx=+selEl.value; setPinIdx(-1); prep(); morph(stage,true);
+    setIdx=+selEl.value; setPinIdx(-1); prep(); syncBlurb(); morph(stage,true);
   };
 
   const MX=26;
@@ -123,11 +129,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   function prep(){
     QS=PR.sets[setIdx].windows.filter(w=>w.hits&&w.hits.length&&w.loci&&w.loci.length);
-    const maxMb=Math.max(...QS.map(w=>w.pos_mb))+0.1;
+    const loMb=Math.min(...QS.map(w=>w.pos_mb));
+    const maxMb=Math.max(...QS.map(w=>w.pos_mb))-loMb+0.1;
     AXY=[]; BXY=[]; CXY=[]; FXY=[]; TICKS=[];
     const V0=VIEWS[0];
     QS.forEach((w,i)=>{
-      AXY.push([lineX(w.pos_mb/maxMb), lineAY]);
+      AXY.push([lineX((w.pos_mb-loMb)/maxMb), lineAY]);
       let sx=0, sy=0, sw=0;
       for(const [h,s] of w.hits){ const wt=1/(1.0001-s);
         sx+=V0.nx[h]*wt; sy+=V0.ny[h]*wt; sw+=wt; }
@@ -418,7 +425,7 @@ document.addEventListener("DOMContentLoaded", () => {
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", rethemePrj);
   new MutationObserver(rethemePrj).observe(document.documentElement,
     {attributes:true, attributeFilter:["data-theme"]});
-  size(); prep(); draw();
+  size(); prep(); syncBlurb(); draw();
   window.__prjDraw=draw; window.__prjMorph=morph; window.__prjPin=setPinIdx;
   window.__prjState=()=>({FSEG, QS, FXY});
   window.__prjPaths=v=>{ showPaths=v; draw(); };

@@ -25,10 +25,28 @@ from .sketch_run import load_store
 
 KMER_DUST_TESTDATA = DATA.parent.parent / "kmer_dust" / "data" / "testdata"
 QUERY_SETS = [
-    ("chm13_slice", "CHM13 chr21 slice (control)", "chm13v2.0.fa.gz"),
-    ("hg00097_h1", "HG00097 hap1 (HPRC)", "HG00097_hap1_hprc_r2_v1.0.1.fa.gz"),
-    ("hg00097_h2", "HG00097 hap2 (HPRC)", "HG00097_hap2_hprc_r2_v1.0.1.fa.gz"),
-    ("na19909_h2", "NA19909 hap2 (HPRC)", "NA19909_hap2_hprc_r2_v1.0.1.fa.gz"),
+    ("chm13_slice", "CHM13 chr21 slice (control)", "chm13v2.0.fa.gz",
+     "the reference projected onto itself — every window must come home (and does: 40/40 to chr21)"),
+    ("hg00097_h1", "HG00097 hap1 · chr21 acro (HPRC)", "HG00097_hap1_hprc_r2_v1.0.1.fa.gz",
+     "a hard acrocentric slice — the pan-acrocentric commons pulls some windows toward chr13/14"),
+    ("hg00097_h2", "HG00097 hap2 · chr21 acro (HPRC)", "HG00097_hap2_hprc_r2_v1.0.1.fa.gz",
+     "same locus, other haplotype — more of its vocabulary finds its best exact home on chr13"),
+    ("na19909_h2", "NA19909 hap2 · chr21 acro (HPRC)", "NA19909_hap2_hprc_r2_v1.0.1.fa.gz",
+     "the extreme case: most of this 'chr21' slice matches CHM13's chr13 better than its chr21"),
+]
+
+# famous T2T regions the showcase fishes out of a whole projected haplotype
+SHOWCASES = [
+    ("mhc", "chr6", 28.5, 33.5, "MHC / HLA",
+     "the genome's most polymorphic region — divergent in sequence, colinear in structure; all windows land on chr6 (J≈0.6)"),
+    ("mapt", "chr17", 45.0, 47.5, "MAPT / 17q21.31",
+     "the 17q21.31 H1/H2 inversion polymorphism — the most word-divergent locus showcased (J≈0.35), yet placed exactly"),
+    ("igh", "chr14", 99.0, 101.2, "IGH",
+     "the immunoglobulin heavy-chain locus — germline-variable between people (window J spans 0.25–0.95)"),
+    ("def8p", "chr8", 6.5, 13.0, "8p23.1 defensins",
+     "an inversion flanked by defensin-cluster segdups with copy-number variation between genomes (J 0.55–0.93)"),
+    ("yq12", "chrY", 30.0, 60.0, "Yq12 heterochromatin",
+     "the giant DYZ satellite ocean; CHM13's chrY IS HG002's — near-self control (J≈0.90, runner-ups elsewhere in Yq12)"),
 ]
 TOP_HITS = 8
 
@@ -74,28 +92,19 @@ class Kit:
             f"full universe {self.universe_full.size/1e6:.1f}M, t={time.time()-t0:.0f}s"
         )
 
-    def project_window(self, codes: np.ndarray):
-        """codes (2-bit) -> model hits (cosine), exact hits (Jaccard), coverage."""
-        import scipy.sparse as sp
+    def project_hashes(self, uniq: np.ndarray, cts: np.ndarray):
+        """Sketch hashes (unique + counts) -> model hits, exact hits, coverage.
 
-        p = self.params
-        _, hs = sketch_codes(codes, p.k, p.embed_scaled)
-        if hs.size < 10:
-            return None
-        uniq, cts = np.unique(hs, return_counts=True)
-
+        Uses index gathers (rows of V, columns of Bfull) so a whole haplotype
+        of windows projects in minutes, not hours."""
         # exact locus evidence: Jaccard vs every bin's full sketch
         posf = np.searchsorted(self.universe_full, uniq)
         okf = (posf < self.universe_full.size) & (
             self.universe_full[np.minimum(posf, self.universe_full.size - 1)] == uniq
         )
-        cover = float(okf.sum() / uniq.size)
-        qv = sp.csc_matrix(
-            (np.ones(int(okf.sum()), np.float32),
-             (posf[okf].astype(np.int64), np.zeros(int(okf.sum()), np.int64))),
-            shape=(self.universe_full.size, 1),
-        )
-        inter = np.asarray((self.Bfull @ qv).todense()).ravel()
+        cover = float(okf.sum() / max(uniq.size, 1))
+        cols = posf[okf].astype(np.int64)
+        inter = np.asarray(self.Bfull[:, cols].sum(axis=1)).ravel()
         jacc = inter / np.maximum(self.bin_sizes + uniq.size - inter, 1.0)
         etop = np.argpartition(-jacc, TOP_HITS)[:TOP_HITS]
         etop = etop[np.argsort(-jacc[etop])]
@@ -107,9 +116,10 @@ class Kit:
         )
         hits, sims = [], []
         if ok.sum() >= 5:
-            w = np.zeros(self.V.shape[0], np.float32)
-            w[pos[ok]] = np.log1p(cts[ok]).astype(np.float32) * self.idf[pos[ok]]
-            zq = (w / max(np.linalg.norm(w), 1e-9)) @ self.V
+            colw = pos[ok]
+            wv = np.log1p(cts[ok]).astype(np.float32) * self.idf[colw]
+            wv /= max(np.linalg.norm(wv), 1e-9)
+            zq = wv @ self.V[colw]
             zq /= max(np.linalg.norm(zq), 1e-9)
             csims = self.Zn @ zq
             top = np.argpartition(-csims, TOP_HITS)[:TOP_HITS]
@@ -121,6 +131,15 @@ class Kit:
             "ehits": etop.tolist(),
             "ejacc": [round(float(jacc[i]), 4) for i in etop],
         }
+
+    def project_window(self, codes: np.ndarray):
+        """codes (2-bit) -> model hits (cosine), exact hits (Jaccard), coverage."""
+        p = self.params
+        _, hs = sketch_codes(codes, p.k, p.embed_scaled)
+        if hs.size < 10:
+            return None
+        uniq, cts = np.unique(hs, return_counts=True)
+        return self.project_hashes(uniq, cts)
 
 
 def loci_of(kit: Kit, hits, sims, gap_bins=3, max_loci=3):
@@ -233,13 +252,13 @@ def run(params: Params = PARAMS) -> None:
     st = selftest(kit)
     print("selftest:", json.dumps(st))
     sets = []
-    for sid, label, fname in QUERY_SETS:
+    for sid, label, fname, blurb in QUERY_SETS:
         path = KMER_DUST_TESTDATA / fname
         if not path.exists():
             print(f"  ({fname} not found; skipping)")
             continue
         windows = project_set(kit, path)
-        sets.append({"id": sid, "label": label, "windows": windows})
+        sets.append({"id": sid, "label": label, "blurb": blurb, "windows": windows})
         med = np.median([w["hits"][0][1] for w in windows if "hits" in w])
         print(f"  {label}: {len(windows)} windows, median top-1 sim {med:.3f}")
     with open(OUT / "projection.json", "w") as fh:
@@ -249,5 +268,87 @@ def run(params: Params = PARAMS) -> None:
     print(f"projection -> out/projection.json, t={time.time()-t0:.0f}s")
 
 
+def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
+    """Project a WHOLE haplotype and pull out the windows whose best exact
+    locus lands in famous T2T regions — the projector locating landmarks in
+    an unannotated assembly by vocabulary alone."""
+    from collections import Counter
+
+    p = kit.params
+    win = p.bin_bp
+    results = []
+    t0 = time.time()
+    for name, codes in iter_fasta_codes(fasta_path):
+        if codes.size < win:
+            continue
+        pos, hs = sketch_codes(codes, p.k, p.embed_scaled)
+        wids = (pos // win).astype(np.int64)
+        order = np.lexsort((hs, wids))
+        wids, hs2 = wids[order], hs[order]
+        bounds = np.flatnonzero(np.diff(wids)) + 1
+        starts = np.concatenate(([0], bounds))
+        ends = np.concatenate((bounds, [wids.size]))
+        for si in range(starts.size):
+            w = int(wids[starts[si]])
+            if (w + 1) * win > codes.size:
+                continue
+            hw = hs2[starts[si]:ends[si]]
+            if hw.size < 10:
+                continue
+            uniq, cts = np.unique(hw, return_counts=True)
+            r = kit.project_hashes(uniq, cts)
+            if r and r["ehits"]:
+                results.append((name, w, r))
+        del codes
+    print(f"  projected {len(results)} windows of {sample} in {time.time()-t0:.0f}s")
+
+    sets = []
+    for sid, chrom, mb0, mb1, label, blurb in SHOWCASES:
+        m = (kit.bins["chrom"] == chrom) & (kit.bins["start"] >= mb0 * 1e6) \
+            & (kit.bins["start"] < mb1 * 1e6)
+        idset = set(np.flatnonzero(m.to_numpy()).tolist())
+        picked = [(n, w, r) for n, w, r in results if r["ehits"][0] in idset]
+        if len(picked) < 8:
+            print(f"  ({label}: only {len(picked)} windows hit "
+                  f"{chrom}:{mb0}-{mb1}; skipped)")
+            continue
+        dom = Counter(n for n, _, _ in picked).most_common(1)[0][0]
+        picked = [h for h in picked if h[0] == dom]
+        picked.sort(key=lambda h: -h[2]["ejacc"][0])
+        picked = sorted(picked[:cap], key=lambda h: h[1])
+        windows = []
+        for name, w, r in picked:
+            windows.append({
+                "label": f"{name}:{w*win/1e6:.1f}–{(w+1)*win/1e6:.1f} Mb",
+                "pos_mb": round(w * win / 1e6, 2),
+                "cover": round(r["cover"], 3),
+                "hits": [[int(h), s2] for h, s2 in zip(r["hits"], r["sims"])] or
+                        [[int(h), s2] for h, s2 in zip(r["ehits"], r["ejacc"])],
+                "loci": loci_of(kit, r["ehits"], r["ejacc"]),
+            })
+        sets.append({"id": sid, "label": f"{sample} · {label}",
+                     "blurb": blurb, "windows": windows})
+        med_cov = float(np.median([w2["cover"] for w2 in windows]))
+        print(f"  {label}: {len(windows)} windows from {dom}, "
+              f"median cover {med_cov:.2f}")
+    return sets
+
+
+def run_showcase(fasta_path, sample: str, params: Params = PARAMS) -> None:
+    kit = Kit(params)
+    new_sets = showcase(kit, fasta_path, sample)
+    pj = json.loads((OUT / "projection.json").read_text())
+    have = {s2["id"] for s2 in new_sets}
+    pj["sets"] = [s2 for s2 in pj["sets"] if s2["id"] not in have] + new_sets
+    with open(OUT / "projection.json", "w") as fh:
+        json.dump(pj, fh)
+    print(f"projection.json now holds {len(pj['sets'])} sets")
+
+
 if __name__ == "__main__":
-    run()
+    import sys
+
+    if len(sys.argv) >= 3 and sys.argv[1] == "showcase":
+        run_showcase(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "HPRC")
+    else:
+        run()

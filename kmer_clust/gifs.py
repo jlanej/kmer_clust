@@ -134,7 +134,8 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
         mb = (sum(((b - chrom_off[ci]) * bin_bp / 1e6 + 0.05) * j for b, j in bj) / sw
               if sw else (l["start_mb"] + l["end_mb"]) / 2)
         w["_fine"] = {"ci": ci, "mb": mb, "j": l["sim"]}
-    max_mb = max(w["pos_mb"] for w in windows) + 0.1
+    lo_mb = min(w["pos_mb"] for w in windows)
+    max_mb = max(w["pos_mb"] for w in windows) - lo_mb + 0.1
     segs, per_mb, total = _fine_axis(windows, chroms, chrom_nbins, bin_bp)
     zoom_x = (n_bins * bin_bp / 1e6) / total
 
@@ -144,7 +145,8 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                 return g["x0"] + (min(max(mb, g["mb0"]), g["mb1"]) - g["mb0"]) * per_mb
         return 0.05
 
-    A = np.array([[0.05 + w["pos_mb"] / max_mb * 0.9, 0.90] for w in windows])
+    A = np.array([[0.05 + (w["pos_mb"] - lo_mb) / max_mb * 0.9, 0.90]
+                  for w in windows])
     B = []
     for w in windows:
         wt = np.array([1 / (1.0001 - s) for _, s in w["hits"]])
@@ -158,12 +160,18 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
     F = np.array([[fine_x(w["_fine"]["ci"], w["_fine"]["mb"]), 0.10] for w in windows])
     STAGES = [A, B, C, F]
     LABELS = ["1 · assembly coordinates", "2 · word-space (T2T ghosted)",
-              "3 · loci on T2T", "4 · fine placement (excised axis)"]
+              "3 · loci on T2T", "4 · fine placement"]
 
     gxy = ghost_xy * [0.9, 0.42] + [0.05, 0.33]
 
+    blurb = set_entry.get("blurb", "")
+    if len(blurb) > 118:
+        blurb = blurb[:115] + "…"
+
     def chrome(ax, stage, salpha):
         ax.text(0.03, 0.955, set_entry["label"], fontsize=11, color=INK, weight="bold")
+        if blurb:
+            ax.text(0.03, 0.925, blurb, fontsize=6.8, color=MUTED)
         ax.text(0.62, 0.955, LABELS[stage], fontsize=9.5, color=MUTED, family="monospace")
         ax.plot([0.05, 0.95], [0.90, 0.90], color=MUTED, lw=0.8, alpha=0.5)
         ax.scatter(gxy[:, 0], gxy[:, 1], s=0.5, c=GREY, alpha=0.5,
@@ -227,9 +235,8 @@ def run(params=PARAMS) -> None:
     xy = bins[["x", "y"]].to_numpy(np.float64)
     ghost = (xy - xy.min(0)) / np.maximum(xy.max(0) - xy.min(0), 1e-9)
     for s in proj["sets"]:
-        dest = MEDIA if s["id"] in ("chm13_slice", "na19909_h2") else OUT / "figs"
         gif_tour(s, chroms, chrom_nbins, chrom_off, len(bins), ghost,
-                 dest / f"tour_{s['id']}.gif")
+                 MEDIA / f"tour_{s['id']}.gif")
 
 
 if __name__ == "__main__":
