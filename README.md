@@ -284,6 +284,37 @@ acrocentric commons, now measurable as lost ordering.
 Each set is one *contiguous* assembly segment (windows between the first and
 last region hit all stay in), so the assembly axis has no artificial holes.
 
+### chrY end-to-end: scaffolding a fragmented chromosome
+
+The year-1 HiFi drafts have no continuous chrY — palindromes and satellite
+arrays break it into pieces. The whole-chromosome sets take every contig
+with ≥ 5 chrY-hitting windows and concatenate them **in the order of their
+median placement**: the projector scaffolding an assembly's Y fragments
+onto the reference by vocabulary alone (break glyphs mark real contig
+junctions; the axis note reports fragments kept, scraps omitted, and
+window thinning).
+
+| set | fragments | windows → top | median J | order τ |
+|---|---|---|---|---|
+| **HG002 pat** (the reference Y *is* his) | 19 of 34 | 118/120 → chrY, 2 → chrX | 0.78 | +0.91 |
+| **HG005 pat** (a different Y lineage) | 20 of 32 | 120/120 → chrY | 0.59 | +0.92 |
+
+![HG002 chrY end-to-end tour](docs/media/tour_y_hg002.gif)
+
+Two findings ride along. **HG002 vs the reference is a draft-vs-finished
+diagnostic**: T2T-Y is the *finished* HG002 Y (ultralong + curation), the
+HPRC file a 2021 HiFi draft — so J splits by terrain (satellite loci 0.82,
+offset-immune, vs non-satellite 0.41, where window-grid offset caps J and
+the ampliconic regions add real draft damage), the two chrX landings sit
+at ~90 Mb — the X-transposed region — and the τ deficit is *concentrated*:
+one fragment's windows walk backward along the reference (chrY 19 → 17 Mb),
+the classic palindrome-arm orientation ambiguity of draft Y assemblies.
+The draft's Y totals ~51 Mb against the reference's 62.5 — the missing
+~11 Mb is collapsed satellite. **HG005 then isolates divergence**: a
+different man's Y drops vocabulary overlap (J 0.59 vs 0.78) while τ holds
+at +0.92 — *order survives divergence; overlap doesn't.* Reproduce with
+`python -m kmer_clust.project ychrom <assembly.fa.gz> "<label>"`.
+
 Each set ships in the atlas dropdown with a one-line blurb, and every
 example has a shareable tour GIF in [docs/media/](docs/media/)
 (e.g. [tour_mhc.gif](docs/media/tour_mhc.gif),

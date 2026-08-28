@@ -106,7 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // composite fine axis: only the matched chromosomes, min..max of the
   // placements (+2 Mb pad), ONE uniform px-per-Mb scale across segments so
   // the zoom is honest; breaks mark the excised genome
-  let FSEG=null, DHUE=[], TAU=0, TAUV="";
+  let FSEG=null, DHUE=[], TAU=0, TAUV="", ABRK=[];
   const dcol=i=>`hsl(${DHUE[i]},68%,54%)`;
   function buildFineAxis(){
     const per=new Map();
@@ -150,6 +150,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     buildFineAxis();
     QS.forEach(w=>FXY.push([fineX(w._fine.ci, w._fine.mb), yFine()]));
+    ABRK=(PR.sets[setIdx].breaks||[]).map(br=>lineX((br-loMb)/maxMb));
     // index paint: hue sweep first->last (blue -> purple -> orange, no green)
     const nq=QS.length;
     DHUE=QS.map((_,i)=>(215+165*(nq>1? i/(nq-1):0))%360);
@@ -245,6 +246,21 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.globalAlpha=0.8;
       ctx.fillText("1", AXY[0][0]-13, lineAY+3);
       ctx.fillText(String(QS.length), AXY[QS.length-1][0]+9, lineAY+3);
+    }
+    if (ABRK.length){
+      ctx.globalAlpha=0.6;
+      for(const bx of ABRK){
+        ctx.beginPath(); ctx.moveTo(bx-4,lineAY+5); ctx.lineTo(bx,lineAY-5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx,lineAY+5); ctx.lineTo(bx+4,lineAY-5); ctx.stroke();
+      }
+      ctx.globalAlpha=0.65;
+      const S0=PR.sets[setIdx];
+      let note=`${S0.n_frags||ABRK.length+1}`+
+        (S0.n_frags_all>S0.n_frags? ` of ${S0.n_frags_all}`:"")+
+        ` assembly fragments, ordered by their placement`;
+      if (S0.scrap_mb) note+=` · ${S0.scrap_mb} Mb of scraps omitted`;
+      if (S0.n_win_all>QS.length) note+=` · showing ${QS.length} of ${S0.n_win_all} windows`;
+      ctx.fillText(note, MX, lineAY+16);
     }
     if (!zoom){
       // loci line (plain) + fine axis (ticked, labeled)

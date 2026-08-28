@@ -124,7 +124,8 @@ def _fine_axis(windows, chroms, chrom_nbins, bin_bp, x0=0.05, x1=0.95):
     return segs, per_mb, total
 
 
-def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_path):
+def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_path,
+             sat=None):
     bin_bp = PARAMS.bin_bp
     windows = [w for w in set_entry["windows"] if w.get("hits") and w.get("loci")]
     for w in windows:
@@ -161,6 +162,8 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
     F = np.array([[fine_x(w["_fine"]["ci"], w["_fine"]["mb"]), 0.10] for w in windows])
     STAGES = [A, B, C, F]
     nq = len(windows)
+    big = nq > 60          # whole-chromosome sets: smaller marks, fainter lines
+    DOT_S, DOT_EW = (13, 0.4) if big else (26, 0.7)
     # index paint: hue sweep first->last (blue -> purple -> orange, no green)
     DCOL = [colorsys.hls_to_rgb(((215 + 165 * (i / (nq - 1) if nq > 1 else 0))
                                  % 360) / 360, 0.50, 0.68) for i in range(nq)]
@@ -190,6 +193,21 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
         ax.plot([0.05, 0.95], [0.22, 0.22], color=MUTED, lw=0.8, alpha=0.4)
         ax.text(0.05, 0.196, "T2T loci (full genome)", fontsize=6.5, color=MUTED)
         for g in segs:
+            if sat is not None:
+                b0 = chrom_off[g["ci"]] + int(g["mb0"] * 1e6 / bin_bp)
+                b1 = chrom_off[g["ci"]] + int(g["mb1"] * 1e6 / bin_bp)
+                run0 = -1
+                for b in range(b0, b1 + 1):
+                    on = b < b1 and bool(sat[b])
+                    if on and run0 < 0:
+                        run0 = b
+                    elif not on and run0 >= 0:
+                        xa = g["x0"] + (run0 - b0) * bin_bp / 1e6 * per_mb
+                        xb = g["x0"] + (b - b0) * bin_bp / 1e6 * per_mb
+                        ax.fill_between([xa, xb], 0.094, 0.106,
+                                        color="#c9b8d8", alpha=0.5,
+                                        linewidth=0, zorder=1)
+                        run0 = -1
             ax.plot([g["x0"], g["x1"]], [0.10, 0.10], color=MUTED, lw=1.0, alpha=0.65)
             ax.text((g["x0"] + g["x1"]) / 2, 0.062,
                     chroms[g["ci"]].replace("chr", ""), fontsize=7.5,
@@ -198,6 +216,9 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
             xm = (segs[i - 1]["x1"] + segs[i]["x0"]) / 2
             ax.plot([xm - 0.005, xm + 0.001], [0.108, 0.092], color=MUTED, lw=0.8)
             ax.plot([xm + 0.001, xm + 0.007], [0.108, 0.092], color=MUTED, lw=0.8)
+        if sat is not None:
+            ax.text(0.95, 0.062, "shaded = satellite reference", fontsize=6,
+                    color=MUTED, ha="right")
         ax.text(0.05, 0.028, f"fine placement — {total:.0f} Mb of "
                 f"{n_bins*bin_bp/1e6:.0f} Mb shown ({zoom_x:.0f}× zoom), "
                 "bar height = exact Jaccard · assembly order "
@@ -206,6 +227,23 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                 ha="right", va="center")
         ax.text(A[-1][0] + 0.008, 0.90, str(nq), fontsize=6.5, color=MUTED,
                 ha="left", va="center")
+        brks = set_entry.get("breaks") or []
+        if brks:
+            for br in brks:
+                bx = 0.05 + (br - lo_mb) / max_mb * 0.9
+                ax.plot([bx - 0.004, bx + 0.001], [0.912, 0.888],
+                        color=MUTED, lw=0.8)
+                ax.plot([bx + 0.001, bx + 0.006], [0.912, 0.888],
+                        color=MUTED, lw=0.8)
+            nf = set_entry.get("n_frags", len(brks) + 1)
+            nfa = set_entry.get("n_frags_all", nf)
+            note = (f"{nf} of {nfa}" if nfa > nf else f"{nf}") + \
+                " assembly fragments, ordered by their placement"
+            if set_entry.get("scrap_mb"):
+                note += f" · {set_entry['scrap_mb']} Mb of scraps omitted"
+            if set_entry.get("n_win_all", 0) > nq:
+                note += f" · showing {nq} of {set_entry['n_win_all']} windows"
+            ax.text(0.05, 0.877, note, fontsize=6, color=MUTED)
         if stage >= 2 and salpha > 0.3:
             for i, w in enumerate(windows):
                 for li, l in enumerate(w["loci"]):
@@ -214,12 +252,14 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                                  ) / n_bins * 0.9
                     src = STAGES[min(stage, 2)][i] if stage == 2 else C[i]
                     ax.plot([src[0], lx], [src[1], 0.222],
-                            color=DCOL[i], lw=0.5 if li else 0.9,
+                            color=DCOL[i], lw=(0.4 if li else 0.7) if big else
+                            (0.5 if li else 0.9),
                             alpha=(0.14 if li else 0.30) * salpha)
         if stage >= 3 and salpha > 0.3:
             for i, w in enumerate(windows):
                 ax.plot([F[i][0], F[i][0]], [0.10, 0.10 + w["_fine"]["j"] * 0.09],
-                        color=DCOL[i], lw=1.6, alpha=0.45 * salpha)
+                        color=DCOL[i], lw=1.0 if big else 1.6,
+                        alpha=0.45 * salpha)
 
     def draw(pts, stage, salpha, paths=0.0):
         def fn(ax):
@@ -228,12 +268,13 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                 for i in range(len(windows)):
                     ax.plot([A[i][0], B[i][0], C[i][0], F[i][0]],
                             [A[i][1], B[i][1], C[i][1], F[i][1]],
-                            color=DCOL[i], lw=1.0, alpha=0.30 * paths, zorder=4)
+                            color=DCOL[i], lw=0.7 if big else 1.0,
+                            alpha=(0.22 if big else 0.30) * paths, zorder=4)
                 for S in (A, B, C):
-                    ax.scatter(S[:, 0], S[:, 1], s=7, c=DCOL,
+                    ax.scatter(S[:, 0], S[:, 1], s=4 if big else 7, c=DCOL,
                                alpha=0.32 * paths, linewidths=0, zorder=4)
-            ax.scatter(pts[:, 0], pts[:, 1], s=26, c=DCOL, zorder=5,
-                       edgecolors=SURFACE, linewidths=0.7)
+            ax.scatter(pts[:, 0], pts[:, 1], s=DOT_S, c=DCOL, zorder=5,
+                       edgecolors=SURFACE, linewidths=DOT_EW)
         return fn
 
     frames = []
@@ -265,9 +306,11 @@ def run(params=PARAMS) -> None:
     chrom_off = np.concatenate(([0], np.cumsum(chrom_nbins)))[:-1].tolist()
     xy = bins[["x", "y"]].to_numpy(np.float64)
     ghost = (xy - xy.min(0)) / np.maximum(xy.max(0) - xy.min(0), 1e-9)
+    annot = pd.read_parquet(OUT / f"annot_{PARAMS.bin_bp}.parquet")
+    sat = (annot["censat_class"] != "").to_numpy()
     for s in proj["sets"]:
         gif_tour(s, chroms, chrom_nbins, chrom_off, len(bins), ghost,
-                 MEDIA / f"tour_{s['id']}.gif")
+                 MEDIA / f"tour_{s['id']}.gif", sat=sat)
 
 
 if __name__ == "__main__":
