@@ -249,7 +249,7 @@ delete to remove.
 ![Projection tour, NA19909 hap2](docs/media/tour_na19909_h2.gif)
 
 *NA19909's chr21-acrocentric slice touring the four stations, closing on
-the world-line finale — every window's full path at once. Its fine
+the world-line finale and the direct assembly↔placement ribbon. Its fine
 placements land on an excised chr13 ∥ chr14 ∥ chr21 axis at 158× zoom —
 most of this haplotype's "chr21" slice finds its best exact home on
 CHM13's chr13.* (Control: [tour_chm13_slice.gif](docs/media/tour_chm13_slice.gif),
@@ -261,8 +261,8 @@ To stress the projector beyond one slice, the entire HG002 paternal
 assembly (HPRC year-1, 29,337 windows of 100 kb) was projected in ~5 min,
 and windows whose best **exact** locus falls in a famous T2T region were
 pulled out — no alignment, no assembly annotation, the projector locating
-landmarks by vocabulary alone. Five made the cut, and their exact-Jaccard
-levels read as a divergence dial across locus biology:
+landmarks by vocabulary alone. The regions that made the cut read as a
+divergence dial across locus biology (exact-Jaccard median, high to low):
 
 | set | windows → top chrom | median J | order τ¹ | what it shows |
 |---|---|---|---|---|
@@ -270,6 +270,7 @@ levels read as a divergence dial across locus biology:
 | **IGH** (chr14) | 13/13 → chr14 | 0.87 | +1.00 | germline-variable between people; window J spans 0.25–0.95 |
 | **SMN1/SMN2 · 5q13** | 8/8 → chr5 | 0.79 | +0.54 | the spinal muscular atrophy locus: 7 of 8 windows carry *two* strong homes ~0.9 Mb apart — the near-identical twin blocks — and assembly order shuffles between them |
 | **22q11.2 · DiGeorge/VCFS** | 35/35 → chr22 | 0.79 | −0.91 | the most common microdeletion syndrome region; LCR22 segdups multi-map, and the contig is reverse-stored (another ribbon X) |
+| **KIR / LRC · 19q13.4** | 9/9 → chr19 | 0.46 | −1.00 | the NK-cell immunity complex: low J throughout, and the KIR window itself is 20% *novel* to CHM13 (coverage 0.80) — KIR haplotypes differ in gene content; the contig is reverse-stored, perfectly (a flawless ribbon X) |
 | **MHC / HLA** (chr6) | 44/44 → chr6 | 0.63 | +1.00 | the genome's most polymorphic region — divergent in sequence, colinear in structure, so every window still lands home (one hypervariable window drops to J = 0.09 and *still* places on chr6) |
 | **8p23.1 defensins** | 44/44 → chr8 | 0.56 | +0.67 | inversion flanked by copy-number-variable segdup clusters — the one showcase locus whose window *order* shuffles |
 | **MAPT / 17q21.31** | 15/15 → chr17 | 0.35 | +1.00 | the H1/H2 inversion polymorphism — most word-divergent locus here, yet placed exactly and in order |

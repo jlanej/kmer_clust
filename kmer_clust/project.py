@@ -49,6 +49,8 @@ SHOWCASES = [
      "the SMA locus: 7 of 8 windows carry TWO strong chr5 homes ~0.9 Mb apart — the SMN1/SMN2 twin blocks (τ +0.54)"),
     ("lcr22", "chr22", 19.2, 22.5, "22q11.2 · DiGeorge/VCFS",
      "the DiGeorge microdeletion region — LCR22 segdups multi-map while the reverse-stored contig inverts the axis (τ −0.91)"),
+    ("lrc_kir", "chr19", 57.15, 58.1, "KIR / LRC · 19q13.4",
+     "NK-cell immunity genes: the KIR window is 20% novel to CHM13 (cover 0.80) — KIR haplotypes differ in gene content"),
     ("yq12", "chrY", 30.0, 60.0, "Yq12 heterochromatin",
      "the giant DYZ satellite ocean; CHM13's chrY IS HG002's — near-self control (J≈0.9, runner-ups elsewhere in Yq12)"),
 ]
