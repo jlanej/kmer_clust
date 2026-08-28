@@ -227,26 +227,9 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                 ha="right", va="center")
         ax.text(A[-1][0] + 0.008, 0.90, str(nq), fontsize=6.5, color=MUTED,
                 ha="left", va="center")
-        brks = set_entry.get("breaks") or []
-        notes = []
-        if brks:
-            for br in brks:
-                bx = 0.05 + (br - lo_mb) / max_mb * 0.9
-                ax.plot([bx - 0.004, bx + 0.001], [0.912, 0.888],
-                        color=MUTED, lw=0.8)
-                ax.plot([bx + 0.001, bx + 0.006], [0.912, 0.888],
-                        color=MUTED, lw=0.8)
-            nf = set_entry.get("n_frags", len(brks) + 1)
-            nfa = set_entry.get("n_frags_all", nf)
-            note = (f"{nf} of {nfa}" if nfa > nf else f"{nf}") + \
-                " assembly fragments, ordered by their placement"
-            if set_entry.get("scrap_mb"):
-                note += f" · {set_entry['scrap_mb']} Mb of scraps omitted"
-            notes.append(note)
         if set_entry.get("n_win_all", 0) > nq:
-            notes.append(f"showing {nq} of {set_entry['n_win_all']} windows")
-        if notes:
-            ax.text(0.05, 0.877, " · ".join(notes), fontsize=6, color=MUTED)
+            ax.text(0.05, 0.877, f"showing {nq} of {set_entry['n_win_all']} "
+                    "windows (uniformly thinned)", fontsize=6, color=MUTED)
         if stage >= 2 and salpha > 0.3:
             for i, w in enumerate(windows):
                 for li, l in enumerate(w["loci"]):

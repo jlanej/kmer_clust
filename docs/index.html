@@ -494,7 +494,8 @@ the frozen vocabulary, and dropped onto this map — no aligner. Below: 4&nbsp;M
 chr21 acrocentric region from two HPRC samples (plus a CHM13 self-slice as control), and a
 <b>showcase</b> fished out of the whole HG002 paternal assembly (29,337 windows projected, ~10 ms
 each): windows whose best exact locus falls in a famous region — MHC, MAPT, IGH, the 8p23.1
-defensins, Yq12 — found by vocabulary alone. Each set's one-liner appears under the picker. Each window
+defensins, Yq12 — found by vocabulary alone; plus one whole chrY contig per sample
+(HG002, HG005), each walking many Mb of the reference Y. Each set's one-liner appears under the picker. Each window
 travels four stations: its own <b>assembly</b> coordinates → its place in <b>word-space</b> →
 its <b>loci on T2T</b> (a solid stem to its best locus, thinner stems to runner-ups — one origin,
 all its homes) → <b>fine placement</b>, a second genome axis where every window lands at once at
@@ -579,7 +580,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // composite fine axis: only the matched chromosomes, min..max of the
   // placements (+2 Mb pad), ONE uniform px-per-Mb scale across segments so
   // the zoom is honest; breaks mark the excised genome
-  let FSEG=null, DHUE=[], TAU=0, TAUV="", ABRK=[];
+  let FSEG=null, DHUE=[], TAU=0, TAUV="";
   const dcol=i=>`hsl(${DHUE[i]},68%,54%)`;
   function buildFineAxis(){
     const per=new Map();
@@ -623,7 +624,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     buildFineAxis();
     QS.forEach(w=>FXY.push([fineX(w._fine.ci, w._fine.mb), yFine()]));
-    ABRK=(PR.sets[setIdx].breaks||[]).map(br=>lineX((br-loMb)/maxMb));
     // index paint: hue sweep first->last (blue -> purple -> orange, no green)
     const nq=QS.length;
     DHUE=QS.map((_,i)=>(215+165*(nq>1? i/(nq-1):0))%360);
@@ -720,22 +720,12 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.fillText("1", AXY[0][0]-13, lineAY+3);
       ctx.fillText(String(QS.length), AXY[QS.length-1][0]+9, lineAY+3);
     }
-    if (ABRK.length){
-      ctx.globalAlpha=0.6;
-      for(const bx of ABRK){
-        ctx.beginPath(); ctx.moveTo(bx-4,lineAY+5); ctx.lineTo(bx,lineAY-5); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(bx,lineAY+5); ctx.lineTo(bx+4,lineAY-5); ctx.stroke();
-      }
-    }
     {
       const S0=PR.sets[setIdx];
-      const parts=[];
-      if (ABRK.length) parts.push(`${S0.n_frags||ABRK.length+1}`+
-        (S0.n_frags_all>S0.n_frags? ` of ${S0.n_frags_all}`:"")+
-        ` assembly fragments, ordered by their placement`+
-        (S0.scrap_mb? ` · ${S0.scrap_mb} Mb of scraps omitted`:""));
-      if (S0.n_win_all>QS.length) parts.push(`showing ${QS.length} of ${S0.n_win_all} windows`);
-      if (parts.length){ ctx.globalAlpha=0.65; ctx.fillText(parts.join(" · "), MX, lineAY+16); }
+      if (S0.n_win_all>QS.length){
+        ctx.globalAlpha=0.65;
+        ctx.fillText(`showing ${QS.length} of ${S0.n_win_all} windows (uniformly thinned)`, MX, lineAY+16);
+      }
     }
     if (!zoom){
       // loci line (plain) + fine axis (ticked, labeled)
