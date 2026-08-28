@@ -86,11 +86,40 @@ document.addEventListener("DOMContentLoaded", () => {
     const ci=P.meta.chroms.indexOf(chrom);
     return ci<0? 0 : (chromOff[ci] + mb*1e6/P.meta.bin_bp) / N;
   }
-  function fineFrac(w){
-    const l=w.loci[0], bj=l.bins_j||[];
+  function fineGenome(w){
+    const l=w.loci[0], ci=P.meta.chroms.indexOf(l.chrom);
     let s=0, sw=0;
-    for(const [b,j] of bj){ s+=((b+0.5)/N)*j; sw+=j; }
-    return sw>0? s/sw : binFrac(l.chrom,(l.start_mb+l.end_mb)/2);
+    for(const [b,j] of (l.bins_j||[])){
+      s+=((b-chromOff[ci])*P.meta.bin_bp/1e6+0.05)*j; sw+=j;
+    }
+    return {ci, mb: sw>0? s/sw : (l.start_mb+l.end_mb)/2, j: l.sim};
+  }
+  // composite fine axis: only the matched chromosomes, min..max of the
+  // placements (+2 Mb pad), ONE uniform px-per-Mb scale across segments so
+  // the zoom is honest; breaks mark the excised genome
+  let FSEG=null;
+  function buildFineAxis(){
+    const per=new Map();
+    QS.forEach(w=>{ const f=w._fine;
+      const a=per.get(f.ci)||[Infinity,-Infinity];
+      a[0]=Math.min(a[0],f.mb); a[1]=Math.max(a[1],f.mb); per.set(f.ci,a); });
+    const PADMB=2;
+    const segs=[...per.entries()].sort((a,b)=>a[0]-b[0]).map(([ci,[lo,hi]])=>{
+      const len=P.meta.chrom_nbins[ci]*P.meta.bin_bp/1e6;
+      return {ci, mb0:Math.max(0,lo-PADMB), mb1:Math.min(len,hi+PADMB)};
+    });
+    const totalMb=segs.reduce((s2,g)=>s2+g.mb1-g.mb0,0)||1;
+    const GAP=16, usable=(W-2*MX)-GAP*(segs.length-1);
+    const pxPerMb=usable/totalMb;
+    let x=MX;
+    for(const g of segs){ g.x0=x; g.x1=x+(g.mb1-g.mb0)*pxPerMb; x=g.x1+GAP; }
+    FSEG={segs, pxPerMb, totalMb, zoomX:(N*P.meta.bin_bp/1e6)/totalMb};
+  }
+  function fineX(ci,mb){
+    if(!FSEG) return MX;
+    const g=FSEG.segs.find(s2=>s2.ci===ci);
+    if(!g) return MX;
+    return g.x0+(Math.min(Math.max(mb,g.mb0),g.mb1)-g.mb0)*FSEG.pxPerMb;
   }
   function prep(){
     QS=PR.sets[setIdx].windows.filter(w=>w.hits&&w.hits.length&&w.loci&&w.loci.length);
@@ -106,8 +135,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const ticks=w.loci.map(l=>lineX(binFrac(l.chrom,(l.start_mb+l.end_mb)/2)));
       TICKS.push(ticks);
       CXY.push([ticks[0], yLoci()-22-(i%3)*14]);
-      FXY.push([lineX(fineFrac(w)), yFine()]);
+      w._fine=fineGenome(w);
     });
+    buildFineAxis();
+    QS.forEach(w=>FXY.push([fineX(w._fine.ci, w._fine.mb), yFine()]));
   }
   function dInfo(){
     if (pinned<0) return null;
@@ -192,19 +223,43 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.globalAlpha=0.4;
       ctx.beginPath(); ctx.moveTo(MX,yl); ctx.lineTo(W-MX,yl); ctx.stroke();
       ctx.globalAlpha=0.6; ctx.fillText("T2T loci", MX, yl+14);
-      ctx.globalAlpha=0.55;
-      ctx.beginPath(); ctx.moveTo(MX,yf); ctx.lineTo(W-MX,yf); ctx.stroke();
-      for(let ci=0;ci<P.meta.chroms.length;ci++){
-        const x=lineX(chromOff[ci]/N);
-        ctx.globalAlpha=0.35;
-        ctx.beginPath(); ctx.moveTo(x,yf-4); ctx.lineTo(x,yf+4); ctx.stroke();
-        if(P.meta.chrom_nbins[ci]/N*(W-2*MX)>26){
+      if (FSEG){
+        for(const g of FSEG.segs){
           ctx.globalAlpha=0.6;
-          ctx.fillText(P.meta.chroms[ci].replace("chr",""),
-            lineX((chromOff[ci]+P.meta.chrom_nbins[ci]/2)/N)-4, yf+16); }
+          ctx.beginPath(); ctx.moveTo(g.x0,yf); ctx.lineTo(g.x1,yf); ctx.stroke();
+          const span=g.mb1-g.mb0;
+          const step= span<=3?0.5: span<=8?1: span<=20?2: span<=50?5: span<=120?10:25;
+          for(let mb=Math.ceil(g.mb0/step)*step; mb<=g.mb1+1e-6; mb+=step){
+            const x=g.x0+(mb-g.mb0)*FSEG.pxPerMb;
+            ctx.globalAlpha=0.4;
+            ctx.beginPath(); ctx.moveTo(x,yf-3); ctx.lineTo(x,yf+3); ctx.stroke();
+            if(FSEG.pxPerMb*step>24){ ctx.globalAlpha=0.6;
+              ctx.fillText(step<1? mb.toFixed(1): mb.toFixed(0), x-6, yf+13); }
+          }
+          ctx.globalAlpha=0.8;
+          ctx.fillText(P.meta.chroms[g.ci].replace("chr",""), (g.x0+g.x1)/2-6, yf+25);
+        }
+        ctx.globalAlpha=0.55;
+        for(let i2=1;i2<FSEG.segs.length;i2++){
+          const xm=(FSEG.segs[i2-1].x1+FSEG.segs[i2].x0)/2;
+          ctx.beginPath(); ctx.moveTo(xm-4,yf+5); ctx.lineTo(xm,yf-5); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(xm,yf+5); ctx.lineTo(xm+4,yf-5); ctx.stroke();
+        }
+        // scale bar (constant px-per-Mb across segments keeps this honest)
+        const L=[0.5,1,2,5,10,20,50].find(t2=>t2*FSEG.pxPerMb>=56)||50;
+        const bx1=W-MX, bx0=bx1-L*FSEG.pxPerMb, by=yf-50;
+        ctx.globalAlpha=0.9;
+        ctx.beginPath(); ctx.moveTo(bx0,by); ctx.lineTo(bx1,by); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx0,by-3); ctx.lineTo(bx0,by+3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(bx1,by-3); ctx.lineTo(bx1,by+3); ctx.stroke();
+        ctx.textAlign="right";
+        ctx.fillText(L<1? (L*1000)+" kb" : L+" Mb", bx1, by-6);
+        ctx.textAlign="left";
+        ctx.globalAlpha=0.7;
+        ctx.fillText(`fine placement — showing ${FSEG.totalMb.toFixed(0)} Mb of `+
+          `${(N*P.meta.bin_bp/1e6).toFixed(0)} Mb (${FSEG.zoomX.toFixed(0)}× zoom), `+
+          `matched chromosomes only`, MX, yf+37);
       }
-      ctx.globalAlpha=0.65;
-      ctx.fillText("fine placement — exact-J-weighted position on T2T", MX, yf+30);
       ctx.globalAlpha=1;
       // stems: lanes -> loci line (stage 2); fine dots -> their locus tick (stage 3)
       if ((stage===2 || stage===3) && t>0.3){
@@ -237,7 +292,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         ctx.globalAlpha=1; ctx.lineWidth=1;
       }
-      // world-lines: all of them when toggled, else focus only
+      // exact-J bars at the fine placements (the reclaimed space earns a bar)
+    if (stage===3 && !zoom && FSEG && t>0.4){
+      const ba=Math.min(1,(t-0.4)/0.4);
+      for(let i=0;i<QS.length;i++){
+        const foc=(i===pinned||i===hover);
+        const x=FXY[i][0], hgt=QS[i]._fine.j*44;
+        ctx.fillStyle=ACC; ctx.globalAlpha=(foc?0.6:0.3)*ba;
+        ctx.fillRect(x-1.5, yf-hgt, 3, hgt);
+      }
+      ctx.globalAlpha=1;
+    }
+    // world-lines: all of them when toggled, else focus only
       if (showPaths) for(let i=0;i<QS.length;i++){
         if(i!==pinned && i!==hover) worldLine(i, 0.22);
       }
@@ -354,6 +420,7 @@ document.addEventListener("DOMContentLoaded", () => {
     {attributes:true, attributeFilter:["data-theme"]});
   size(); prep(); draw();
   window.__prjDraw=draw; window.__prjMorph=morph; window.__prjPin=setPinIdx;
+  window.__prjState=()=>({FSEG, QS, FXY});
   window.__prjPaths=v=>{ showPaths=v; draw(); };
 });
 </script>

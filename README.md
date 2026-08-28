@@ -8,6 +8,13 @@ same words.
 **→ The interactive atlas: [`docs/index.html`](docs/index.html)** (deployed to
 GitHub Pages by [`pages.yml`](.github/workflows/pages.yml)).
 
+![The map morphing through word lengths k=15..25](docs/media/k_sweep.gif)
+
+*The same 31,185 bins re-sketched at every word length from k=15 to k=25 —
+word length is a composition↔homology dial, and the satellites hold station
+throughout. Colors are censat annotation, which judges the map and never
+builds it.*
+
 This repo is the deliberately-narrow successor of
 [kmer_dust](https://github.com/jlanej/kmer_dust): one genome, one sketch engine,
 two analysis tracks, one self-contained report. Where kmer_dust spanned 463 HPRC
@@ -230,12 +237,22 @@ the pan-acrocentric commons, measured per window, with runner-up loci and
 vocabulary coverage (95–98%) carrying the ambiguity. The atlas gains a
 four-stage morphing panel: assembly coordinates → word-space placement →
 T2T loci (dots lifted into lanes, solid stem to the best locus, thin stems
-to runner-ups) → fine placement, a second full-genome axis where every
-window lands at once at its exact-Jaccard-weighted position — all
-comparable. Click pins a window (world-line through all four stations,
-loci lit in the main views); a "paths" toggle draws every world-line at
-once, and "zoom locus" opens per-locus J-bar detail for the pinned
-window. Modular as `project.html`, delete to remove.
+to runner-ups) → fine placement on an auto-zooming excised axis: only the
+matched chromosomes remain, spanning the placements' min–max (+2 Mb), at
+one uniform px-per-Mb scale with break marks, a scale bar, an "N× zoom"
+readout, and a per-window exact-Jaccard bar. Click pins a window
+(world-line through all four stations, loci lit in the main views); a
+"paths" toggle draws every world-line at once, and "zoom locus" opens
+per-locus J-bar detail for the pinned window. Modular as `project.html`,
+delete to remove.
+
+![Projection tour, NA19909 hap2](docs/media/tour_na19909_h2.gif)
+
+*NA19909's chr21-acrocentric slice touring the four stations. Its fine
+placements land on an excised chr13 ∥ chr14 ∥ chr21 axis at 158× zoom —
+most of this haplotype's "chr21" slice finds its best exact home on
+CHM13's chr13.* (Control: [tour_chm13_slice.gif](docs/media/tour_chm13_slice.gif),
+one contiguous chr21 segment at 395×.)
 
 ## Deliberately out of scope
 

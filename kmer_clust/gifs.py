@@ -1,0 +1,236 @@
+"""Render shareable GIFs straight from the data (no browser capture):
+
+- k_sweep.gif           the map morphing through vocabularies k=15..25
+- tour_<set>.gif        the projection tour: assembly -> word-space -> loci
+                        -> fine placement (composite excised axis, J bars)
+
+Outputs land in docs/media/ (tracked, for the README) and out/figs/.
+Run: python -m kmer_clust.gifs
+"""
+
+import json
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from PIL import Image
+
+from .config import DOCS, OUT, PARAMS
+from .figures import censat_palette
+
+ACC = "#3987e5"
+SURFACE = "#fcfcfb"
+INK = "#171916"
+MUTED = "#8b897f"
+GREY = "#c9c8c2"
+MEDIA = DOCS / "media"
+
+
+def ease(t):
+    return 2 * t * t if t < 0.5 else 1 - (-2 * t + 2) ** 2 / 2
+
+
+def frame(draw_fn, w=6.4, h=4.7):
+    fig = plt.figure(figsize=(w, h), dpi=100)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_axis_off()
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+    draw_fn(ax)
+    fig.canvas.draw()
+    img = Image.fromarray(np.asarray(fig.canvas.buffer_rgba())[:, :, :3])
+    plt.close(fig)
+    return img
+
+
+def save_gif(frames, path, duration=85):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frames[0].save(path, save_all=True, append_images=frames[1:],
+                   duration=duration, loop=0, optimize=True)
+    print(f"  {path} ({path.stat().st_size/1e6:.1f} MB, {len(frames)} frames)")
+
+
+def norm_layouts(store, keys):
+    pts = np.concatenate([store[k] for k in keys])
+    lo, hi = pts.min(0), pts.max(0)
+    return {k: (store[k] - lo) / np.maximum(hi - lo, 1e-9) for k in keys}
+
+
+def gif_k_sweep(out_path):
+    store = np.load(OUT / "kladder.npz")
+    kl = json.loads((OUT / "kladder.json").read_text())
+    ks = kl["ks"]
+    keys = [f"k{k}" for k in ks]
+    L = norm_layouts(store, keys)
+    annot = pd.read_parquet(OUT / f"annot_{PARAMS.bin_bp}.parquet")
+    pal = censat_palette(PARAMS)
+    colors = np.array([pal.get(c if c else "non_sat", GREY)
+                       for c in annot["censat_class"]])
+    sat = (annot["censat_class"] != "").to_numpy()
+    order = np.argsort(sat)  # satellites drawn on top
+
+    def draw(xy, label):
+        def fn(ax):
+            p = xy[order]
+            ax.scatter(p[:, 0] * 0.9 + 0.05, p[:, 1] * 0.82 + 0.10,
+                       s=1.0, c=colors[order], linewidths=0, rasterized=True)
+            ax.text(0.03, 0.955, f"word length {label}", fontsize=15,
+                    color=INK, family="monospace", weight="bold")
+            ax.text(0.03, 0.915, "the same 31,185 bins, re-sketched — "
+                    "colors are censat annotation (judge, not input)",
+                    fontsize=8, color=MUTED)
+        return fn
+
+    frames = []
+    seq = keys + [keys[0]]  # loop back to k15
+    for a, b in zip(seq[:-1], seq[1:]):
+        ka = a[1:]
+        for _ in range(7):
+            frames.append(frame(draw(L[a], f"k = {ka}")))
+        n_tr = 14 if b == keys[0] else 11
+        for f in range(1, n_tr):
+            t = ease(f / n_tr)
+            frames.append(frame(draw(L[a] * (1 - t) + L[b] * t, f"k = {ka}")))
+    save_gif(frames, out_path)
+
+
+def _fine_axis(windows, chroms, chrom_nbins, bin_bp, x0=0.05, x1=0.95):
+    """Composite excised axis in figure coords (mirrors the atlas panel)."""
+    per = {}
+    for w in windows:
+        f = w["_fine"]
+        lo, hi = per.get(f["ci"], (np.inf, -np.inf))
+        per[f["ci"]] = (min(lo, f["mb"]), max(hi, f["mb"]))
+    segs = []
+    for ci in sorted(per):
+        lo, hi = per[ci]
+        clen = chrom_nbins[ci] * bin_bp / 1e6
+        segs.append({"ci": ci, "mb0": max(0, lo - 2), "mb1": min(clen, hi + 2)})
+    total = sum(g["mb1"] - g["mb0"] for g in segs) or 1
+    gap = 0.02
+    usable = (x1 - x0) - gap * (len(segs) - 1)
+    per_mb = usable / total
+    x = x0
+    for g in segs:
+        g["x0"] = x
+        g["x1"] = x + (g["mb1"] - g["mb0"]) * per_mb
+        x = g["x1"] + gap
+    return segs, per_mb, total
+
+
+def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_path):
+    bin_bp = PARAMS.bin_bp
+    windows = [w for w in set_entry["windows"] if w.get("hits") and w.get("loci")]
+    for w in windows:
+        l = w["loci"][0]
+        ci = chroms.index(l["chrom"])
+        bj = l.get("bins_j") or []
+        sw = sum(j for _, j in bj)
+        mb = (sum(((b - chrom_off[ci]) * bin_bp / 1e6 + 0.05) * j for b, j in bj) / sw
+              if sw else (l["start_mb"] + l["end_mb"]) / 2)
+        w["_fine"] = {"ci": ci, "mb": mb, "j": l["sim"]}
+    max_mb = max(w["pos_mb"] for w in windows) + 0.1
+    segs, per_mb, total = _fine_axis(windows, chroms, chrom_nbins, bin_bp)
+    zoom_x = (n_bins * bin_bp / 1e6) / total
+
+    def fine_x(ci, mb):
+        for g in segs:
+            if g["ci"] == ci:
+                return g["x0"] + (min(max(mb, g["mb0"]), g["mb1"]) - g["mb0"]) * per_mb
+        return 0.05
+
+    A = np.array([[0.05 + w["pos_mb"] / max_mb * 0.9, 0.90] for w in windows])
+    B = []
+    for w in windows:
+        wt = np.array([1 / (1.0001 - s) for _, s in w["hits"]])
+        pts = ghost_xy[[h for h, _ in w["hits"]]]
+        B.append((pts * wt[:, None]).sum(0) / wt.sum())
+    B = np.array(B) * [0.9, 0.42] + [0.05, 0.33]
+    C = np.array([[0.05 + (chrom_off[chroms.index(w["loci"][0]["chrom"])]
+                           + (w["loci"][0]["start_mb"] + w["loci"][0]["end_mb"]) / 2
+                           * 1e6 / bin_bp) / n_bins * 0.9,
+                   0.245 + (i % 3) * 0.022] for i, w in enumerate(windows)])
+    F = np.array([[fine_x(w["_fine"]["ci"], w["_fine"]["mb"]), 0.10] for w in windows])
+    STAGES = [A, B, C, F]
+    LABELS = ["1 · assembly coordinates", "2 · word-space (T2T ghosted)",
+              "3 · loci on T2T", "4 · fine placement (excised axis)"]
+
+    gxy = ghost_xy * [0.9, 0.42] + [0.05, 0.33]
+
+    def chrome(ax, stage, salpha):
+        ax.text(0.03, 0.955, set_entry["label"], fontsize=11, color=INK, weight="bold")
+        ax.text(0.62, 0.955, LABELS[stage], fontsize=9.5, color=MUTED, family="monospace")
+        ax.plot([0.05, 0.95], [0.90, 0.90], color=MUTED, lw=0.8, alpha=0.5)
+        ax.scatter(gxy[:, 0], gxy[:, 1], s=0.5, c=GREY, alpha=0.5,
+                   linewidths=0, rasterized=True)
+        ax.plot([0.05, 0.95], [0.22, 0.22], color=MUTED, lw=0.8, alpha=0.4)
+        ax.text(0.05, 0.196, "T2T loci (full genome)", fontsize=6.5, color=MUTED)
+        for g in segs:
+            ax.plot([g["x0"], g["x1"]], [0.10, 0.10], color=MUTED, lw=1.0, alpha=0.65)
+            ax.text((g["x0"] + g["x1"]) / 2, 0.062,
+                    chroms[g["ci"]].replace("chr", ""), fontsize=7.5,
+                    color=MUTED, ha="center")
+        for i in range(1, len(segs)):
+            xm = (segs[i - 1]["x1"] + segs[i]["x0"]) / 2
+            ax.plot([xm - 0.005, xm + 0.001], [0.108, 0.092], color=MUTED, lw=0.8)
+            ax.plot([xm + 0.001, xm + 0.007], [0.108, 0.092], color=MUTED, lw=0.8)
+        ax.text(0.05, 0.028, f"fine placement — {total:.0f} Mb of "
+                f"{n_bins*bin_bp/1e6:.0f} Mb shown ({zoom_x:.0f}× zoom), "
+                "bar height = exact Jaccard", fontsize=6.5, color=MUTED)
+        if stage >= 2 and salpha > 0.3:
+            for i, w in enumerate(windows):
+                for li, l in enumerate(w["loci"]):
+                    lx = 0.05 + (chrom_off[chroms.index(l["chrom"])]
+                                 + (l["start_mb"] + l["end_mb"]) / 2 * 1e6 / bin_bp
+                                 ) / n_bins * 0.9
+                    src = STAGES[min(stage, 2)][i] if stage == 2 else C[i]
+                    ax.plot([src[0], lx], [src[1], 0.222],
+                            color=ACC, lw=0.5 if li else 0.9,
+                            alpha=(0.12 if li else 0.25) * salpha)
+        if stage == 3 and salpha > 0.3:
+            for i, w in enumerate(windows):
+                ax.plot([F[i][0], F[i][0]], [0.10, 0.10 + w["_fine"]["j"] * 0.09],
+                        color=ACC, lw=1.6, alpha=0.35 * salpha)
+
+    def draw(pts, stage, salpha):
+        def fn(ax):
+            chrome(ax, stage, salpha)
+            ax.scatter(pts[:, 0], pts[:, 1], s=26, c=ACC, zorder=5,
+                       edgecolors=SURFACE, linewidths=0.7)
+        return fn
+
+    frames = []
+    order = STAGES + [STAGES[0]]
+    for si in range(len(order) - 1):
+        stage = si % 4
+        for _ in range(9):
+            frames.append(frame(draw(order[si], stage, 1.0)))
+        for f in range(1, 12):
+            t = ease(f / 12)
+            frames.append(frame(draw(order[si] * (1 - t) + order[si + 1] * t,
+                                     stage, 1 - t)))
+    save_gif(frames, out_path)
+
+
+def run(params=PARAMS) -> None:
+    gif_k_sweep(MEDIA / "k_sweep.gif")
+    proj = json.loads((OUT / "projection.json").read_text())
+    bins = pd.read_parquet(OUT / "bins_embedded.parquet")
+    chroms = list(dict.fromkeys(bins["chrom"]))
+    chrom_nbins = [int((bins["chrom"] == c).sum()) for c in chroms]
+    chrom_off = np.concatenate(([0], np.cumsum(chrom_nbins)))[:-1].tolist()
+    xy = bins[["x", "y"]].to_numpy(np.float64)
+    ghost = (xy - xy.min(0)) / np.maximum(xy.max(0) - xy.min(0), 1e-9)
+    for s in proj["sets"]:
+        dest = MEDIA if s["id"] in ("chm13_slice", "na19909_h2") else OUT / "figs"
+        gif_tour(s, chroms, chrom_nbins, chrom_off, len(bins), ghost,
+                 dest / f"tour_{s['id']}.gif")
+
+
+if __name__ == "__main__":
+    run()

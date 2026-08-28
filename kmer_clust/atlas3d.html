@@ -145,7 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
     for (let i = s0; i < s1; i++) {
       const [x, y, d] = projBin(i, s0, s1);
       const near = Math.max(0, Math.min(1, (d + 1.4) / 2.8));
-      ctx.globalAlpha = (sel && !inSel(i)) ? 0.10 : 0.25 + 0.62 * near;
+      ctx.globalAlpha = (sel && !inSel(i)) ? 0.12 : 0.34 + 0.56 * near;
       ctx.fillStyle = (sel && !inSel(i)) ? noise : pointColor(i);
       const r = (0.85 + 1.5 * near) * (chromSel < 0 ? 1 : 1.5);
       ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
