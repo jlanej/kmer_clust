@@ -146,6 +146,7 @@ def loci_of(kit: Kit, hits, sims, gap_bins=3, max_loci=3):
             "end_mb": round(float((rows.iloc[members]["end"].max()) / 1e6), 1),
             "sim": sims[i],
             "bins": [hits[m] for m in members],
+            "bins_j": [[hits[m], sims[m]] for m in members],
         })
         if len(loci) >= max_loci:
             break

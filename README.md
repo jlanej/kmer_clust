@@ -221,8 +221,12 @@ and NA19909: the CHM13 control maps 40/40 windows to chr21, while the HPRC
 haplotypes send 20–70% of their windows to chr13/chr14 as best exact home —
 the pan-acrocentric commons, measured per window, with runner-up loci and
 vocabulary coverage (95–98%) carrying the ambiguity. The atlas gains a
-morphing panel: assembly coordinates → word-space placement → T2T loci
-(echoes = runner-up loci); modular as `project.html`, delete to remove.
+four-stage morphing panel: assembly coordinates → word-space placement →
+T2T loci (dots lifted into lanes, solid stem to the best locus, thin stems
+to runner-ups) → fine placement (zoom into the pinned window's primary
+locus, landing at 100 kb resolution by exact-Jaccard weight). Click pins a
+window: its world-line through every station draws at once and its loci
+light up in the main views. Modular as `project.html`, delete to remove.
 
 ## Deliberately out of scope
 
