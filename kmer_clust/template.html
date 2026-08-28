@@ -393,6 +393,24 @@ next to each other.</figcaption>
     Jaccard — the shared fraction of the union. One sparse matrix product yields all ~4.9 million
     pairs, and the model must agree with this ground truth or lose; that agreement is measured on
     the scorecard above, not assumed.</p>
+    <p><b>Projection.</b> A segment from any assembly is placed in four moves. First it is
+    sketched with the identical lottery — same words, same tickets — so each 100 kb window
+    arrives as a bag of kept words directly comparable with every T2T bin, along with a coverage
+    score: the fraction of its words CHM13 has ever seen anywhere (a per-window novelty meter).
+    Second, <em>where in word-space</em>: the window's words that belong to the shared vocabulary
+    take the frozen training weights and pass through the frozen SVD basis into the same 128
+    coordinates; its cosine-nearest bins are its dialect neighborhood, and it is drawn at their
+    similarity-weighted center. Third, <em>which locus</em>: the window's full sketch —
+    private words included — is intersected with every bin's full sketch in one sparse product,
+    and exact Jaccard ranks the candidates. This second signal exists because euchromatic street
+    addresses live precisely in the private words the model excludes: cosine alone names the
+    right locus 30% of the time; exact Jaccard, 97%. The top hits are then chained into loci —
+    genomically adjacent bins merge into one, distinct places stay distinct — so a window that
+    belongs to several regions reports up to three, each carrying its own J; within the best
+    locus, the J-weighted centroid of the member bins gives a landing point at 100 kb
+    resolution. Validated by self-projection of half-overlapping T2T windows: top-1 97%
+    (euchromatin) / 70% (satellite &amp; acrocentric, where within-array ties are the honest
+    residue), top-3 99% / 92%.</p>
     <p><b>Views.</b> The <b>k</b> slider re-sketches the genome at each word length 15–25.
     Long words mean identity — a shared 21-mer (4<sup>21</sup> ≈ 1,400× the genome) is evidence of
     common descent — while short words drift toward composition (4<sup>15</sup> is about the
