@@ -410,7 +410,11 @@ next to each other.</figcaption>
     locus, the J-weighted centroid of the member bins gives a landing point at 100 kb
     resolution. Validated by self-projection of half-overlapping T2T windows: top-1 97%
     (euchromatin) / 70% (satellite &amp; acrocentric, where within-array ties are the honest
-    residue), top-3 99% / 92%.</p>
+    residue), top-3 99% / 92%. One transparency note: the SVD contributes compression, not
+    information, to projection — full-rank shared-vocabulary cosine lands windows in the same
+    place (median displacement 0.01% of the map span) — and loci never touch it at all; it is
+    used because the map itself is that basis flattened, so queries are placed in the display's
+    own geometry.</p>
     <p><b>Views.</b> The <b>k</b> slider re-sketches the genome at each word length 15–25.
     Long words mean identity — a shared 21-mer (4<sup>21</sup> ≈ 1,400× the genome) is evidence of
     common descent — while short words drift toward composition (4<sup>15</sup> is about the
