@@ -174,7 +174,8 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
     tauv = ("collinear" if tau >= 0.85 else "inverted" if tau <= -0.85 else
             "mostly ordered" if abs(tau) >= 0.5 else "scrambled")
     LABELS = ["1 · assembly coordinates", "2 · word-space (T2T ghosted)",
-              "3 · loci on T2T", "4 · fine placement", "5 · world-lines"]
+              "3 · loci on T2T", "4 · fine placement", "5 · world-lines",
+              "6 · assembly ↔ placement"]
 
     gxy = ghost_xy * [0.9, 0.42] + [0.05, 0.33]
 
@@ -182,16 +183,19 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
     if len(blurb) > 118:
         blurb = blurb[:115] + "…"
 
-    def chrome(ax, stage, salpha):
+    def chrome(ax, stage, salpha, direct=0.0):
         ax.text(0.03, 0.955, set_entry["label"], fontsize=11, color=INK, weight="bold")
         if blurb:
             ax.text(0.03, 0.925, blurb, fontsize=6.8, color=MUTED)
         ax.text(0.62, 0.955, LABELS[stage], fontsize=9.5, color=MUTED, family="monospace")
         ax.plot([0.05, 0.95], [0.90, 0.90], color=MUTED, lw=0.8, alpha=0.5)
-        ax.scatter(gxy[:, 0], gxy[:, 1], s=0.5, c=GREY, alpha=0.5,
-                   linewidths=0, rasterized=True)
-        ax.plot([0.05, 0.95], [0.22, 0.22], color=MUTED, lw=0.8, alpha=0.4)
-        ax.text(0.05, 0.196, "T2T loci (full genome)", fontsize=6.5, color=MUTED)
+        if direct < 0.995:
+            ax.scatter(gxy[:, 0], gxy[:, 1], s=0.5, c=GREY,
+                       alpha=0.5 * (1 - direct), linewidths=0, rasterized=True)
+            ax.plot([0.05, 0.95], [0.22, 0.22], color=MUTED, lw=0.8,
+                    alpha=0.4 * (1 - direct))
+            ax.text(0.05, 0.196, "T2T loci (full genome)", fontsize=6.5,
+                    color=MUTED, alpha=1 - direct)
         for g in segs:
             if sat is not None:
                 b0 = chrom_off[g["ci"]] + int(g["mb0"] * 1e6 / bin_bp)
@@ -230,7 +234,7 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
         if set_entry.get("n_win_all", 0) > nq:
             ax.text(0.05, 0.877, f"showing {nq} of {set_entry['n_win_all']} "
                     "windows (uniformly thinned)", fontsize=6, color=MUTED)
-        if stage >= 2 and salpha > 0.3:
+        if stage >= 2 and salpha > 0.3 and direct < 0.98:
             for i, w in enumerate(windows):
                 for li, l in enumerate(w["loci"]):
                     lx = 0.05 + (chrom_off[chroms.index(l["chrom"])]
@@ -240,25 +244,32 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
                     ax.plot([src[0], lx], [src[1], 0.222],
                             color=DCOL[i], lw=(0.4 if li else 0.7) if big else
                             (0.5 if li else 0.9),
-                            alpha=(0.14 if li else 0.30) * salpha)
+                            alpha=(0.14 if li else 0.30) * salpha * (1 - direct))
         if stage >= 3 and salpha > 0.3:
             for i, w in enumerate(windows):
                 ax.plot([F[i][0], F[i][0]], [0.10, 0.10 + w["_fine"]["j"] * 0.09],
                         color=DCOL[i], lw=1.0 if big else 1.6,
                         alpha=0.45 * salpha)
 
-    def draw(pts, stage, salpha, paths=0.0):
+    def draw(pts, stage, salpha, paths=0.0, direct=0.0):
         def fn(ax):
-            chrome(ax, stage, salpha)
+            chrome(ax, stage, salpha, direct)
             if paths > 0.01:
                 for i in range(len(windows)):
-                    ax.plot([A[i][0], B[i][0], C[i][0], F[i][0]],
-                            [A[i][1], B[i][1], C[i][1], F[i][1]],
+                    p1 = B[i] + (A[i] + (F[i] - A[i]) / 3 - B[i]) * direct
+                    p2 = C[i] + (A[i] + (F[i] - A[i]) * 2 / 3 - C[i]) * direct
+                    ax.plot([A[i][0], p1[0], p2[0], F[i][0]],
+                            [A[i][1], p1[1], p2[1], F[i][1]],
                             color=DCOL[i], lw=0.7 if big else 1.0,
-                            alpha=(0.22 if big else 0.30) * paths, zorder=4)
-                for S in (A, B, C):
-                    ax.scatter(S[:, 0], S[:, 1], s=4 if big else 7, c=DCOL,
-                               alpha=0.32 * paths, linewidths=0, zorder=4)
+                            alpha=(0.22 if big else 0.30) * paths
+                            + 0.12 * direct, zorder=4)
+                ax.scatter(A[:, 0], A[:, 1], s=4 if big else 7, c=DCOL,
+                           alpha=0.32 * paths, linewidths=0, zorder=4)
+                if direct < 0.98:
+                    for S in (B, C):
+                        ax.scatter(S[:, 0], S[:, 1], s=4 if big else 7, c=DCOL,
+                                   alpha=0.32 * paths * (1 - direct),
+                                   linewidths=0, zorder=4)
             ax.scatter(pts[:, 0], pts[:, 1], s=DOT_S, c=DCOL, zorder=5,
                        edgecolors=SURFACE, linewidths=DOT_EW)
         return fn
@@ -273,13 +284,22 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
         if finale:  # world-lines: every path through all four stations at once
             for f in range(1, 7):
                 frames.append(frame(draw(order[si], 4, 1.0, paths=ease(f / 6))))
-            for _ in range(14):
+            for _ in range(12):
                 frames.append(frame(draw(order[si], 4, 1.0, paths=1.0)))
+            # then the inner tracks dissolve and every path straightens into
+            # a direct assembly <-> placement ribbon
+            for f in range(1, 9):
+                frames.append(frame(draw(order[si], 5, 1.0, paths=1.0,
+                                         direct=ease(f / 8))))
+            for _ in range(12):
+                frames.append(frame(draw(order[si], 5, 1.0, paths=1.0,
+                                         direct=1.0)))
         for f in range(1, 12):
             t = ease(f / 12)
             frames.append(frame(draw(order[si] * (1 - t) + order[si + 1] * t,
-                                     4 if finale else stage, 1 - t,
-                                     paths=(1 - t) if finale else 0.0)))
+                                     5 if finale else stage, 1 - t,
+                                     paths=(1 - t) if finale else 0.0,
+                                     direct=(1 - t) if finale else 0.0)))
     save_gif(frames, out_path)
 
 

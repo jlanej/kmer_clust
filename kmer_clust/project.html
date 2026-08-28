@@ -31,8 +31,9 @@ gradient out smoothly the projection is collinear with the assembly; a reversed 
 inversion, a shuffle is the commons — the <b>τ</b> readout on the fine axis scores it.
 <b>Click a window to pin it</b> — its world-line through all
 four stations draws at once and its loci light up in the views above; the <b>paths</b> toggle
-draws every world-line together, and <b>zoom locus</b> opens a per-locus detail view for the
-pinned window. Hover for hits and vocabulary coverage.</p>
+draws every world-line together, <b>direct</b> hides the two inner stations and straightens
+every path into an assembly&thinsp;↔&thinsp;placement ribbon (order and orientation at a glance),
+and <b>zoom locus</b> opens a per-locus detail view for the pinned window. Hover for hits and vocabulary coverage.</p>
 <div class="controls">
   <select id="prj-set" class="selctl" title="which query assembly slice to project"></select>
   <div class="seg" id="prj-stage" role="group" aria-label="projection stage">
@@ -42,6 +43,7 @@ pinned window. Hover for hits and vocabulary coverage.</p>
     <button data-s="3" aria-pressed="false" title="every window at once on a second genome axis, at its exact-Jaccard-weighted position — all comparable">fine placement</button>
   </div>
   <button class="ghost" id="prj-paths" aria-pressed="false" title="draw every window's world-line through all four stations at once">paths</button>
+  <button class="ghost" id="prj-direct" aria-pressed="false" title="hide the two inner stations and straighten every path into a direct assembly-to-placement ribbon">direct</button>
   <button class="ghost" id="prj-zoom" aria-pressed="false" disabled title="per-locus detail for the pinned window: member bins as exact-J bars and the weighted landing point (pin a window first)">zoom locus</button>
   <button class="ghost" id="prj-tour" aria-pressed="false" title="cycle the four stages automatically">tour</button>
 </div>
@@ -187,7 +189,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const e=t<0.5? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
     return [f[0]+(to[0]-f[0])*e, f[1]+(to[1]-f[1])*e];
   }
+  let direct=0, directOn=false, dAnim=0;
+  function setDirect(on){
+    directOn=on;
+    const db=document.getElementById("prj-direct");
+    db.setAttribute("aria-pressed", String(on));
+    if (on && stage!==3) morph(3,false);
+    if (dAnim) cancelAnimationFrame(dAnim);
+    const to=on?1:0;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || document.hidden){
+      direct=to; draw(); return;
+    }
+    const from0=direct, t0=performance.now(), DUR=650;
+    const step=now=>{
+      const u=Math.min(1,(now-t0)/DUR);
+      const e=u<0.5? 2*u*u : 1-Math.pow(-2*u+2,2)/2;
+      direct=from0+(to-from0)*e; draw();
+      if (u<1) dAnim=requestAnimationFrame(step); else dAnim=0;
+    };
+    dAnim=requestAnimationFrame(step);
+  }
   function morph(s, jump){
+    if (directOn && s!==3) setDirect(false);
     for(const b of document.querySelectorAll("#prj-stage button"))
       b.setAttribute("aria-pressed", +b.dataset.s===s);
     from=QS.map((_,i)=>pos(i));
@@ -212,7 +235,14 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.stroke();
   }
   function worldLine(i, alpha){
-    const pts=STATIONS(i);
+    const pts=STATIONS(i).map(p=>[p[0],p[1]]);
+    if (direct>0.001){
+      const a=pts[0], f=pts[3];
+      for (const [k,tf] of [[1,1/3],[2,2/3]]){
+        pts[k][0]+= (a[0]+(f[0]-a[0])*tf - pts[k][0])*direct;
+        pts[k][1]+= (a[1]+(f[1]-a[1])*tf - pts[k][1])*direct;
+      }
+    }
     ctx.strokeStyle=dcol(i); ctx.setLineDash([4,4]);
     ctx.globalAlpha=alpha; ctx.lineWidth=alpha>0.5?1.6:1.2;
     ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
@@ -232,7 +262,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if(!ghost){ ghost=document.createElement("canvas");
       ghost.width=cv.width; ghost.height=cv.height;
       const g=ghost.getContext("2d"); g.setTransform(DPR,0,0,DPR,0,0); drawGhost(g); }
-    ctx.setTransform(1,0,0,1,0,0); ctx.drawImage(ghost,0,0);
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.globalAlpha=1-direct; ctx.drawImage(ghost,0,0); ctx.globalAlpha=1;
     ctx.setTransform(DPR,0,0,DPR,0,0);
     const muted=css("--muted"), yl=yLoci(), yf=yFine();
     const zoom = zoomOn && pinned>=0 ? dInfo() : null;
@@ -256,9 +287,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (!zoom){
       // loci line (plain) + fine axis (ticked, labeled)
-      ctx.globalAlpha=0.4;
+      ctx.globalAlpha=0.4*(1-direct);
       ctx.beginPath(); ctx.moveTo(MX,yl); ctx.lineTo(W-MX,yl); ctx.stroke();
-      ctx.globalAlpha=0.6; ctx.fillText("T2T loci", MX, yl+14);
+      ctx.globalAlpha=0.6*(1-direct); ctx.fillText("T2T loci", MX, yl+14);
       if (FSEG){
         for(const g of FSEG.segs){
           ctx.globalAlpha=0.6;
@@ -298,8 +329,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       ctx.globalAlpha=1;
       // stems: lanes -> loci line (stage 2); fine dots -> their locus tick (stage 3)
-      if ((stage===2 || stage===3) && t>0.3){
-        const fadeIn=Math.min(1,(t-0.3)/0.4);
+      if ((stage===2 || stage===3) && t>0.3 && direct<0.98){
+        const fadeIn=Math.min(1,(t-0.3)/0.4)*(1-direct);
         for(let i=0;i<QS.length;i++){
           const foc=(i===pinned||i===hover);
           const [x,y]=pos(i);
@@ -340,11 +371,16 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.globalAlpha=1;
     }
     // world-lines: all of them when toggled, else focus only
-      if (showPaths) for(let i=0;i<QS.length;i++){
-        if(i!==pinned && i!==hover) worldLine(i, 0.22);
+      if (showPaths || direct>0.001) for(let i=0;i<QS.length;i++){
+        if(i!==pinned && i!==hover) worldLine(i, 0.22+0.1*direct);
       }
       const focus=pinned>=0? pinned : hover;
       if (focus>=0) worldLine(focus, pinned>=0?0.7:0.45);
+      if (direct>0.001) for(let i=0;i<QS.length;i++){
+        ctx.fillStyle=dcol(i); ctx.globalAlpha=0.35*direct;
+        ctx.beginPath(); ctx.arc(AXY[i][0],AXY[i][1],2.2,0,7); ctx.fill();
+      }
+      ctx.globalAlpha=1;
     } else {
       // per-locus detail overlay for the pinned window
       const d=zoom;
@@ -442,6 +478,9 @@ document.addEventListener("DOMContentLoaded", () => {
     draw();
   };
   let tour=0;
+  document.getElementById("prj-direct").onclick=function(){
+    setDirect(!directOn);
+  };
   document.getElementById("prj-tour").onclick=function(){
     if(tour){ clearInterval(tour); tour=0; this.setAttribute("aria-pressed","false"); return; }
     this.setAttribute("aria-pressed","true");
@@ -457,7 +496,7 @@ document.addEventListener("DOMContentLoaded", () => {
     {attributes:true, attributeFilter:["data-theme"]});
   size(); prep(); syncBlurb(); draw();
   window.__prjDraw=draw; window.__prjMorph=morph; window.__prjPin=setPinIdx;
-  window.__prjState=()=>({FSEG, QS, FXY});
+  window.__prjState=()=>({FSEG, QS, FXY, direct, stage});
   window.__prjPaths=v=>{ showPaths=v; draw(); };
 });
 </script>

@@ -276,7 +276,11 @@ levels read as a divergence dial across locus biology:
 and its fine placement along the excised axis — a synteny readout with no
 alignment anywhere. The atlas paints every dot by assembly order
 (blue → orange), so collinearity is visible as a smooth gradient at fine
-placement; τ is printed on the axis. The CHM13 self-control scores a
+placement; τ is printed on the axis. A **direct** toggle (and each GIF's
+closing beat) morphs the two inner stations away and straightens every
+world-line into an assembly ↔ placement ribbon — a classic synteny
+ribbon plot, derived without an aligner: parallel ribbons = collinear,
+one full crossing = a reverse-oriented contig, a weave = the commons. The CHM13 self-control scores a
 perfect +1.00, and the three chr21-acro haplotype slices form a
 scrambling dial: HG00097 h1 +0.95, h2 +0.71, NA19909 h2 **−0.19** — the
 acrocentric commons, now measurable as lost ordering.
