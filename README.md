@@ -223,10 +223,12 @@ the pan-acrocentric commons, measured per window, with runner-up loci and
 vocabulary coverage (95–98%) carrying the ambiguity. The atlas gains a
 four-stage morphing panel: assembly coordinates → word-space placement →
 T2T loci (dots lifted into lanes, solid stem to the best locus, thin stems
-to runner-ups) → fine placement (zoom into the pinned window's primary
-locus, landing at 100 kb resolution by exact-Jaccard weight). Click pins a
-window: its world-line through every station draws at once and its loci
-light up in the main views. Modular as `project.html`, delete to remove.
+to runner-ups) → fine placement, a second full-genome axis where every
+window lands at once at its exact-Jaccard-weighted position — all
+comparable. Click pins a window (world-line through all four stations,
+loci lit in the main views); a "paths" toggle draws every world-line at
+once, and "zoom locus" opens per-locus J-bar detail for the pinned
+window. Modular as `project.html`, delete to remove.
 
 ## Deliberately out of scope
 
