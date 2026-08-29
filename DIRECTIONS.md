@@ -87,7 +87,8 @@ synteny, not per-window placement, novelty, or satellite-interior behavior.
 
 ## Proposed real-world use cases, ranked by (impact × feasibility here)
 
-1. **`triage` — a one-command draft-assembly compass.** Per contig, from
+1. **`triage` — a one-command draft-assembly compass.** ✅ *Shipped — see
+   [README § Triage](README.md#triage-the-assembly-compass).* Per contig, from
    one scan: best chromosome and span walked, orientation (sign of τ),
    fraction of windows confidently placed, novelty profile (runs of
    low-coverage windows = candidate personal/unrepresented sequence or

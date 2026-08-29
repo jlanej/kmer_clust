@@ -195,6 +195,38 @@ Two additions keep the build annotation-agnostic while articulating the map:
   euchromatin); concatenating all six k's is dominated by both — redundant
   middle horizons average the ends away. Both winners ship as atlas views.
 
+## Triage: the assembly compass
+
+The first DIRECTIONS use case, shipped:
+
+```bash
+python -m kmer_clust.project triage <assembly.fa.gz> "<label>"
+```
+
+One cached scan (~5 min fresh, seconds cached) produces a per-contig
+table (`out/triage_<tag>.tsv` + JSON), a console summary, and a one-page
+compass figure: every contig painted onto the reference at its dominant
+chromosome span, colored by orientation (sign of τ), opacity by median
+exact J, satellite terrain shaded, low-coverage (novel) runs and
+satellite-terminated ends marked.
+
+![HG002 assembly compass](docs/media/triage_hg002.png)
+
+Headline numbers for the two year-1 drafts: HG002-pat — 98% of windows
+placed confidently, reference breadth 90%, orientation census 46 forward
+/ 45 reverse (contig strand is arbitrary; the compass makes it visible),
+83.8 Mb below coverage 0.9, and **54% of contig ends land in satellite**
+— "death by satellite," previously an anecdote, now a statistic.
+HG005-pat: 99% confident, 60.2 Mb novel, 41% satellite ends. The table
+reproduces every hand-established finding automatically (the chr13
+q-arm contig: reverse, τ −1.0, satellite-terminated, novelty run
+96.1–97.4 Mb at min coverage 0.55 — the centromere entry, rediscovered
+by triage) and surfaces new review candidates (a 59-window contig at
+58% dominant-chromosome, τ −0.4, 5 order jumps). Compared to standard
+QC: needs no reads (unlike Merqury), no alignment (unlike Flagger), and
+reads orientation and order — the balanced events coverage-based tools
+state they cannot see.
+
 ## Methods, precisely
 
 Everything below is implemented in this repository; file names in

@@ -506,6 +506,181 @@ def run_showcase(fasta_path, sample: str, params: Params = PARAMS) -> None:
     print(f"projection.json now holds {len(pj['sets'])} sets")
 
 
+# ---------------------------------------------------------------- triage
+TRIAGE_MIN_WIN = 3       # report contigs with at least this many windows
+TRIAGE_ORIENT_WIN = 5    # orientation verdicts need this many placed windows
+TRIAGE_NOVEL_COVER = 0.90
+TRIAGE_JUMP_MB = 5.0
+
+
+def _tau_a(order_vals, tie=0.01):
+    n = len(order_vals)
+    if n < 2:
+        return 0.0
+    S = sum(np.sign(order_vals[j] - order_vals[i])
+            if abs(order_vals[j] - order_vals[i]) > tie else 0
+            for i in range(n) for j in range(i + 1, n))
+    return float(S / (n * (n - 1) / 2))
+
+
+def triage_rows(chrom_idx, bin_mb, sat_mask, results, bin_bp,
+                min_windows: int = TRIAGE_MIN_WIN):
+    """Per-contig compass rows from a whole-assembly scan.
+
+    chrom_idx[b], bin_mb[b]: reference chromosome index and within-chromosome
+    Mb of bin b; sat_mask[b]: censat != '' (judge only). results: the
+    scan_haplotype list. Pure function — unit-testable on synthetic data."""
+    by_contig = {}
+    for n, w, r in results:
+        by_contig.setdefault(n, []).append((w, r))
+    rows = []
+    for contig, ws in sorted(by_contig.items()):
+        ws.sort()
+        if len(ws) < min_windows:
+            continue
+        j1 = np.array([r["ejacc"][0] for _, r in ws])
+        top = np.array([r["ehits"][0] for _, r in ws])
+        cov = np.array([r["cover"] for _, r in ws])
+        ci = chrom_idx[top]
+        placed = j1 >= 0.1
+        # dominant chromosome among placed windows
+        if placed.sum():
+            vals, cnts = np.unique(ci[placed], return_counts=True)
+            dom = int(vals[cnts.argmax()])
+            dom_n = int(cnts.max())
+        else:
+            dom, dom_n = -1, 0
+        on_dom = placed & (ci == dom)
+        mbs = bin_mb[top]
+        span_lo = float(mbs[on_dom].min()) if dom_n else float("nan")
+        span_hi = float(mbs[on_dom].max()) if dom_n else float("nan")
+        # orientation: assembly order vs reference position on the dominant chrom
+        if dom_n >= TRIAGE_ORIENT_WIN:
+            tau = _tau_a(list(mbs[on_dom]))
+            orient = ("forward" if tau >= 0.85 else
+                      "reverse" if tau <= -0.85 else
+                      "mostly+" if tau >= 0.5 else
+                      "mostly-" if tau <= -0.5 else "scrambled")
+        else:
+            tau, orient = float("nan"), "short"
+        # order breaks: adjacent placed windows jumping chromosome or > 5 Mb
+        jumps = 0
+        prev = None
+        for k in range(len(ws)):
+            if not placed[k]:
+                continue
+            cur = (int(ci[k]), float(mbs[k]))
+            if prev is not None and (cur[0] != prev[0]
+                                     or abs(cur[1] - prev[1]) > TRIAGE_JUMP_MB):
+                jumps += 1
+            prev = cur
+        # novelty runs: contiguous windows (step 1) below the coverage bar
+        runs, cur0 = [], None
+        wids = [w for w, _ in ws]
+        for k in range(len(ws)):
+            low = cov[k] < TRIAGE_NOVEL_COVER
+            step = k > 0 and wids[k] == wids[k - 1] + 1
+            if low and cur0 is not None and step:
+                pass
+            elif low:
+                cur0 = k
+            if (not low or k == len(ws) - 1) and cur0 is not None:
+                k1 = k if (low and k == len(ws) - 1) else k - 1
+                if k1 >= cur0:
+                    runs.append((cur0, k1))
+                cur0 = None
+        runs = [(a, b) for a, b in runs if b - a + 1 >= 3]
+        best_run = max(runs, key=lambda ab: ab[1] - ab[0], default=None)
+        nov = {"novel_frac": round(float((cov < TRIAGE_NOVEL_COVER).mean()), 3)}
+        if best_run is not None:
+            a, b = best_run
+            nov.update(novel_run_mb0=round(wids[a] * bin_bp / 1e6, 1),
+                       novel_run_mb1=round((wids[b] + 1) * bin_bp / 1e6, 1),
+                       novel_run_mincov=round(float(cov[a:b + 1].min()), 2))
+        def terrain(k):
+            if not placed[k]:
+                return "unplaced"
+            return "satellite" if sat_mask[top[k]] else "non-sat"
+        rows.append({
+            "contig": contig, "n_win": len(ws),
+            "mb": round(len(ws) * bin_bp / 1e6, 1),
+            "dom_chrom": int(dom), "dom_frac": round(dom_n / max(placed.sum(), 1), 2),
+            "span_lo": round(span_lo, 1) if dom_n else None,
+            "span_hi": round(span_hi, 1) if dom_n else None,
+            "tau": round(tau, 2) if tau == tau else None,
+            "orient": orient, "jumps": int(jumps),
+            "j_med": round(float(np.median(j1)), 2),
+            "cover_med": round(float(np.median(cov)), 2),
+            "end5": terrain(0), "end3": terrain(len(ws) - 1), **nov,
+        })
+    return rows
+
+
+def triage_summary(rows, results, n_ref_bins, bin_bp):
+    j1 = np.array([r["ejacc"][0] for _, _, r in results])
+    cov = np.array([r["cover"] for _, _, r in results])
+    top = np.array([r["ehits"][0] for _, _, r in results])
+    big = [r for r in rows if r["n_win"] >= TRIAGE_ORIENT_WIN]
+    ends = [r[e] for r in big for e in ("end5", "end3")]
+    orient = {}
+    for r in big:
+        orient[r["orient"]] = orient.get(r["orient"], 0) + 1
+    return {
+        "n_windows": len(results),
+        "assembly_mb": round(len(results) * bin_bp / 1e6, 1),
+        "n_contigs_reported": len(rows),
+        "placed_confident": round(float((j1 >= 0.3).mean()), 3),
+        "placed_weak": round(float(((j1 >= 0.1) & (j1 < 0.3)).mean()), 3),
+        "unplaced": round(float((j1 < 0.1).mean()), 3),
+        "ref_breadth": round(len(np.unique(top)) / n_ref_bins, 3),
+        "novel_mb": round(float((cov < TRIAGE_NOVEL_COVER).sum()) * bin_bp / 1e6, 1),
+        "orientation_census": orient,
+        "ends_in_satellite": round(ends.count("satellite") / max(len(ends), 1), 3),
+        "ends_unplaced": round(ends.count("unplaced") / max(len(ends), 1), 3),
+    }
+
+
+def run_triage(fasta_path, sample: str, params: Params = PARAMS) -> None:
+    from pathlib import Path
+
+    kit = Kit(params)
+    results = scan_haplotype(kit, fasta_path)
+    chroms = list(dict.fromkeys(kit.bins["chrom"]))
+    chrom_idx = np.array([chroms.index(c) for c in kit.bins["chrom"]])
+    bin_mb = (kit.bins["start"].to_numpy() / 1e6) + params.bin_bp / 2e6
+    annot = pd.read_parquet(OUT / f"annot_{params.bin_bp}.parquet")
+    sat_mask = (annot["censat_class"] != "").to_numpy()
+    rows = triage_rows(chrom_idx, bin_mb, sat_mask, results, params.bin_bp)
+    summ = triage_summary(rows, results, len(kit.bins), params.bin_bp)
+
+    tag = Path(fasta_path).name.removesuffix(".gz").removesuffix(".fa")
+    df = pd.DataFrame(rows)
+    df["dom_chrom"] = [chroms[c] if c >= 0 else "" for c in df["dom_chrom"]]
+    tsv = OUT / f"triage_{tag}.tsv"
+    df.to_csv(tsv, sep="\t", index=False)
+    print(f"\n== triage: {sample} ==")
+    print(f"{summ['n_windows']} windows ({summ['assembly_mb']} Mb) in "
+          f"{summ['n_contigs_reported']} contigs (>= {TRIAGE_MIN_WIN} windows)")
+    print(f"placement: {summ['placed_confident']:.0%} confident (J>=0.3), "
+          f"{summ['placed_weak']:.0%} weak, {summ['unplaced']:.0%} unplaced; "
+          f"reference breadth {summ['ref_breadth']:.0%}")
+    print(f"orientation census (>= {TRIAGE_ORIENT_WIN} windows): "
+          + ", ".join(f"{k} {v}" for k, v in sorted(summ["orientation_census"].items())))
+    print(f"novel vs reference: {summ['novel_mb']} Mb below cover "
+          f"{TRIAGE_NOVEL_COVER}; contig ends in satellite: "
+          f"{summ['ends_in_satellite']:.0%} (unplaced {summ['ends_unplaced']:.0%})")
+    print(f"table: {tsv}")
+    with open(OUT / f"triage_{tag}.json", "w") as fh:
+        json.dump({"sample": sample, "summary": summ, "rows": rows}, fh)
+    try:
+        from .figures import fig_triage
+        png = fig_triage(rows, summ, chroms, kit.bins, sat_mask, params,
+                         sample, tag)
+        print(f"figure: {png}")
+    except Exception as e:  # figure is a bonus, never blocks the table
+        print(f"(figure skipped: {e})")
+
+
 def run_ychrom(fasta_path, sample: str, blurb: str = "",
                params: Params = PARAMS) -> None:
     kit = Kit(params)
@@ -529,6 +704,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) >= 3 and sys.argv[1] == "showcase":
         run_showcase(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "HPRC")
+    elif len(sys.argv) >= 3 and sys.argv[1] == "triage":
+        run_triage(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "assembly")
     elif len(sys.argv) >= 3 and sys.argv[1] == "ychrom":
         run_ychrom(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "HPRC",
                    sys.argv[4] if len(sys.argv) > 4 else "")

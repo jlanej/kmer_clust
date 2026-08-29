@@ -101,3 +101,62 @@ def test_whole_chrom_thinning_keeps_span_and_discloses():
     # uniform thinning keeps both ends of the contig span
     assert st["windows"][0]["pos_mb"] == 0.0
     assert st["windows"][-1]["pos_mb"] == 3.9
+
+
+# ---------------------------------------------------------------- triage
+import numpy as np
+
+from kmer_clust.project import triage_rows, triage_summary
+
+
+def _tri_setup():
+    # 2 chroms x 50 bins; satellite = chrY bins 30..49
+    chrom_idx = np.array([0] * 50 + [1] * 50)
+    bin_mb = np.array([i * 0.1 + 0.05 for i in range(50)] * 2)
+    sat = np.zeros(100, bool); sat[80:] = True
+    return chrom_idx, bin_mb, sat
+
+
+def test_triage_forward_and_reverse_orientation():
+    chrom_idx, bin_mb, sat = _tri_setup()
+    fwd = [("tigF", w, rec([10 + w], [0.8])) for w in range(10)]
+    rev = [("tigR", w, rec([40 - w], [0.8])) for w in range(10)]
+    rows = triage_rows(chrom_idx, bin_mb, sat, fwd + rev, BIN)
+    by = {r["contig"]: r for r in rows}
+    assert by["tigF"]["orient"] == "forward" and by["tigF"]["tau"] == 1.0
+    assert by["tigR"]["orient"] == "reverse" and by["tigR"]["tau"] == -1.0
+    assert by["tigF"]["jumps"] == 0
+
+
+def test_triage_jump_and_dominant_chrom():
+    chrom_idx, bin_mb, sat = _tri_setup()
+    # 6 windows on chr0 then 3 on chr1: one chromosome jump, chr0 dominant
+    res = [("tigJ", w, rec([5 + w], [0.9])) for w in range(6)] + \
+          [("tigJ", 6 + w, rec([60 + w], [0.9])) for w in range(3)]
+    rows = triage_rows(chrom_idx, bin_mb, sat, res, BIN)
+    r = rows[0]
+    assert r["dom_chrom"] == 0 and r["jumps"] == 1
+    assert r["end5"] == "non-sat"
+
+
+def test_triage_novelty_run_and_sat_end():
+    chrom_idx, bin_mb, sat = _tri_setup()
+    res = []
+    for w in range(12):
+        cover = 0.5 if 4 <= w <= 8 else 0.99
+        res.append(("tigN", w, rec([85 + (w % 3)], [0.8], cover=cover)))
+    rows = triage_rows(chrom_idx, bin_mb, sat, res, BIN)
+    r = rows[0]
+    assert r["novel_run_mb0"] == 0.4 and r["novel_run_mb1"] == 0.9
+    assert r["novel_run_mincov"] == 0.5
+    assert r["end5"] == "satellite" and r["end3"] == "satellite"
+
+
+def test_triage_summary_counts():
+    chrom_idx, bin_mb, sat = _tri_setup()
+    res = [("tigF", w, rec([10 + w], [0.8])) for w in range(10)]
+    rows = triage_rows(chrom_idx, bin_mb, sat, res, BIN)
+    s = triage_summary(rows, res, 100, BIN)
+    assert s["n_windows"] == 10 and s["placed_confident"] == 1.0
+    assert s["orientation_census"] == {"forward": 1}
+    assert s["ends_in_satellite"] == 0.0

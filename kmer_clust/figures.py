@@ -345,3 +345,101 @@ def fig_acro(params: Params):
     axr.set_title("Where along each arm identity survives", color=INK, fontsize=10, loc="left")
     fig.savefig(FIG_DIR / "acro_focus.png", facecolor=SURFACE, bbox_inches="tight")
     plt.close(fig)
+
+
+# ---------------------------------------------------------------- triage
+ORIENT_COLORS = {
+    "forward": "#3987e5", "mostly+": "#7fb0ec",
+    "reverse": "#d94f26", "mostly-": "#e59a82",
+    "scrambled": "#9a988e", "short": "#c9c8c2",
+}
+
+
+def fig_triage(rows, summ, chroms, bins, sat_mask, params, sample, tag):
+    """One-page assembly compass: contigs painted onto the reference by
+    orientation, satellite terrain shaded, novelty runs ticked."""
+    bin_bp = params.bin_bp
+    nb = len(bins)
+    starts = bins["start"].to_numpy()
+    chrom_of = bins["chrom"].to_numpy()
+    off = {}
+    x0 = 0
+    for c in chroms:
+        off[c] = x0
+        x0 += int((chrom_of == c).sum())
+    genome_mb = nb * bin_bp / 1e6
+
+    def gx(ci, mb):  # genome-concatenated Mb
+        return (off[chroms[ci]] * bin_bp / 1e6) + mb
+
+    fig, ax = plt.subplots(figsize=(13, 6.5), dpi=110)
+    fig.patch.set_facecolor("#fcfcfb")
+    ax.set_facecolor("#fcfcfb")
+    # reference band with satellite terrain
+    sat_x = np.flatnonzero(sat_mask) * bin_bp / 1e6
+    ax.vlines(sat_x, -1.5, 0, color="#c9b8d8", lw=0.3, alpha=0.5, zorder=1)
+    ax.hlines(-0.75, 0, genome_mb, color="#8b897f", lw=1.2, zorder=2)
+    for c in chroms:
+        cx = off[c] * bin_bp / 1e6
+        ax.vlines(cx, -1.8, 0.3, color="#8b897f", lw=0.4, alpha=0.5)
+        n_c = int((chrom_of == c).sum())
+        ax.text(cx + n_c * bin_bp / 2e6, -2.6, c.replace("chr", ""),
+                ha="center", fontsize=7, color="#6f6d64")
+    # contig segments in greedy lanes
+    segs = []
+    for r in rows:
+        if r["n_win"] < 5 or r["dom_chrom"] < 0 or r["span_lo"] is None:
+            continue
+        a, b = gx(r["dom_chrom"], r["span_lo"]), gx(r["dom_chrom"], r["span_hi"])
+        segs.append((a, max(b, a + 1.5), r))
+    segs.sort(key=lambda s: -(s[1] - s[0]))
+    lanes = []  # each lane: list of (a,b)
+    for a, b, r in segs:
+        for li, lane in enumerate(lanes):
+            if all(b + 8 < la or a - 8 > lb for la, lb in lane):
+                lane.append((a, b)); r["_lane"] = li; break
+        else:
+            lanes.append([(a, b)]); r["_lane"] = len(lanes) - 1
+    for a, b, r in segs:
+        y = 1.2 + r["_lane"] * 1.05
+        col = ORIENT_COLORS.get(r["orient"], "#9a988e")
+        ax.plot([a, b], [y, y], color=col, lw=2.6,
+                alpha=0.35 + 0.6 * min(r["j_med"], 1.0),
+                solid_capstyle="butt", zorder=3)
+        if b - a >= 4:  # markers only where they don't swallow the segment
+            for e, xx in (("end5", a), ("end3", b)):
+                if r[e] == "satellite":
+                    ax.plot([xx], [y], marker="s", ms=1.9, color="#7a5fa0",
+                            zorder=4, lw=0)
+        if r.get("novel_run_mb0") is not None and b - a >= 4:
+            xm = (a + b) / 2
+            ax.plot([xm], [y + 0.30], marker="v", ms=2.6, color="#5b3d8a",
+                    alpha=0.85, zorder=4, lw=0)
+    ymax = 1.2 + max((len(lanes) - 1), 0) * 1.05 + 1.4
+    ax.set_xlim(-15, genome_mb + 15)
+    ax.set_ylim(-3.4, max(ymax, 6))
+    ax.set_axis_off()
+    o = summ["orientation_census"]
+    ax.text(0, ymax + 0.2,
+            f"{sample} — assembly compass · {summ['n_windows']:,} windows "
+            f"({summ['assembly_mb']:,} Mb), {summ['n_contigs_reported']} contigs · "
+            f"placement {summ['placed_confident']:.0%} confident / "
+            f"{summ['unplaced']:.0%} unplaced · reference breadth "
+            f"{summ['ref_breadth']:.0%}",
+            fontsize=10.5, color="#171916", weight="bold")
+    ax.text(0, ymax - 0.55,
+            "orientation: " + ", ".join(f"{k} {v}" for k, v in sorted(o.items()))
+            + f" · novel vs reference {summ['novel_mb']} Mb"
+            + f" · contig ends in satellite {summ['ends_in_satellite']:.0%}",
+            fontsize=8.5, color="#6f6d64")
+    ax.text(0, -3.3,
+            "lane = contig span on its dominant chromosome · color = orientation "
+            "(blue forward, red reverse, grey scrambled) · opacity = median exact J · "
+            "▪ end lands in satellite · ▼ low-coverage (novel) run · "
+            "lavender terrain = satellite reference",
+            fontsize=7, color="#6f6d64")
+    png = OUT / "figs" / f"triage_{tag}.png"
+    png.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(png, bbox_inches="tight", facecolor="#fcfcfb")
+    plt.close(fig)
+    return png
