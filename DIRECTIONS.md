@@ -98,9 +98,9 @@ synteny, not per-window placement, novelty, or satellite-interior behavior.
    alignment; catches inversions). All machinery exists in
    `project.py`; output = TSV + a ribbon summary panel. Demo on the
    HG002/HG005 drafts already scanned.
-2. **Ultralong-read locus recruitment.** ✅ *Simulated-read benchmark
-   shipped — see [README § Benchmarks](README.md#benchmarks-the-claims-quantified);
-   real ONT UL fastq validation remains open.* Reads ≥100 kb are the same size
+2. **Ultralong-read locus recruitment.** ✅ *Shipped, including real-data
+   validation on 1,200 GIAB HG002 ultralong reads at ~10% error — see
+   [README § Benchmarks](README.md#benchmarks-the-claims-quantified).* Reads ≥100 kb are the same size
    as our windows: place raw ONT UL reads by vocabulary (locus + J +
    coverage + runner-ups), benchmark against Winnowmap2 on reads
    simulated from T2T including centromeres. Generalizes centroFlye's

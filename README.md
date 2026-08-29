@@ -265,6 +265,31 @@ genome-wide with no markers and no HOR annotation. The coverage meter
 simultaneously reads the error rate ((1−p)²¹ ≈ 0.65 at 2%, measured
 0.69) — placement and quality estimation from the same sketch.
 
+**Real ultralong reads** — the real test: 1,200 reads ≥ 50 kb streamed
+from the GIAB HG002 ultralong PromethION run (2019 basecalls — median
+alignment identity 0.90, i.e. **~10% real error**), each placed by the
+projector (9 ms/read) and by minimap2 map-ont (~80 ms/read) against the
+same CHM13 (`python -m kmer_clust.bench_real`):
+
+- Where minimap2 is confident (mapq ≥ 50, non-satellite; n = 1,091):
+  **99.4% chromosome and 98.8% bin-level (±1 window) concordance.**
+- All 6 discordant reads **identify themselves**: their placement margin
+  (top J vs best distant J) is ≈ 1× versus a median 12.5× for correct
+  calls — a margin ≥ 2× rule abstains on every one of them.
+- The 24 reads minimap2 cannot align at all read as 11–28% error on our
+  coverage meter — independently flagged as junk, with the reason.
+- Satellite-landing reads: only 25% get minimap2 mapq ≥ 20 (the
+  documented collapse, live), while our placements agree with minimap2's
+  best guess at 84% chromosome-level.
+- **The error meter**: per-read error estimated from vocabulary coverage
+  alone, err = 1 − cover^(1/21), tracks minimap2's alignment identity at
+  **Pearson r = 0.941** with fit 0.48·x + 0.000 — zero intercept; the
+  slope reflects ONT error clustering (adjacent errors destroy shared
+  k-mers), so one linear calibration makes the sketch a read-quality
+  meter with no alignment and no basecaller QVs.
+
+![Real ultralong reads: error meter and self-identifying errors](docs/media/real_reads.png)
+
 The **assembly compass** panel in the atlas makes triage live: contigs
 painted on the reference by orientation, hover for the full row, click
 to light a contig's span up in the map, territory, and thread.
