@@ -196,3 +196,27 @@ def test_inject_errors_rate_and_revcomp():
 def test_auc_separation():
     assert _auc(np.zeros(10), np.ones(10)) == 1.0
     assert abs(_auc(np.arange(10.0), np.arange(10.0)) - 0.5) < 1e-9
+
+
+def test_triage_novelty_run_splits_at_window_gap():
+    # low cover at wids 0-4 and 6-9 with wid 5 missing: the LONGER first
+    # run must survive the gap (regression: it used to vanish)
+    chrom_idx, bin_mb, sat = _tri_setup()
+    res = [("tigG", w, rec([10 + w], [0.8], cover=0.5))
+           for w in list(range(5)) + list(range(6, 10))]
+    rows = triage_rows(chrom_idx, bin_mb, sat, res, BIN)
+    r = rows[0]
+    assert r["novel_run_mb0"] == 0.0 and r["novel_run_mb1"] == 0.5
+
+
+def test_auc_mixed_ties_hand_example():
+    assert _auc(np.array([0.0, 1.0]), np.array([1.0, 2.0])) == 0.875
+
+
+def test_triage_unplaced_contig_and_empty_summary():
+    chrom_idx, bin_mb, sat = _tri_setup()
+    res = [("tigU", w, rec([10 + w], [0.01])) for w in range(8)]  # all J<0.1
+    rows = triage_rows(chrom_idx, bin_mb, sat, res, BIN)
+    assert rows[0]["orient"] == "unplaced"
+    s = triage_summary(rows, res, 100, BIN)
+    assert s["unplaced"] == 1.0 and s["ends_in_satellite"] == 0.0

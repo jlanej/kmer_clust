@@ -5,22 +5,34 @@ vocabulary.** No aligner, no reference coordinate, no orthology. Every dot is a
 100 kb bin of T2T-CHM13v2.0; bins land next to each other because they use the
 same words.
 
-**→ The interactive atlas: [`docs/index.html`](docs/index.html)** (deployed to
-GitHub Pages by [`pages.yml`](.github/workflows/pages.yml)).
+**→ The interactive atlas: [jlanej.github.io/kmer_clust](https://jlanej.github.io/kmer_clust/)**
+(source [`docs/index.html`](docs/index.html), deployed by
+[`pages.yml`](.github/workflows/pages.yml)).
 
 ![The map morphing through word lengths k=15..25](docs/media/k_sweep.gif)
 
 *The same 31,185 bins re-sketched at every word length from k=15 to k=25 —
 word length is a composition↔homology dial, and the satellites hold station
-throughout. Colors are censat annotation, which judges the map and never
-builds it.*
+throughout. Colors are censat — the T2T centromere/satellite annotation
+(v2.1) — which judges the map and never builds it.*
+
+![The map at k=21, colored by satellite class](docs/media/map_censat.png)
+
+**Contents:** [pipeline](#the-pipeline) · [design](#design-decisions-and-why) ·
+[what the map shows](#what-the-map-should-show--and-does) ·
+[structure levers](#finding-more-structure-annotation-free-levers) ·
+[projection](#projection-prototype) · [showcase](#showcase-famous-loci-fished-out-of-a-whole-haplotype) ·
+[chrY](#chry-one-contig-per-sample) · [triage](#triage-the-assembly-compass) ·
+[benchmarks](#benchmarks-the-claims-quantified) · [methods](#methods-precisely) ·
+[repo](#repo-layout) · [data](#data) · [license & citing](#license--citing)
 
 This repo is the deliberately-narrow successor of
 [kmer_dust](https://github.com/jlanej/kmer_dust): one genome, one sketch engine,
 two analysis tracks, one self-contained report. Where kmer_dust spanned 463 HPRC
 assemblies with 10 kb bins at scaled=200 (~50 hashes per bin — its own
 representation study found satellite bins vocabulary-starved at ~27), kmer_clust
-inverts the trade: **100 kb bins at scaled=20**, roughly 250× more hashes per
+inverts the trade: **100 kb bins at scaled=20** (keep the ~1-in-20 of k-mers
+whose hash falls lowest — ~5,000 kept per bin), roughly 250× more hashes per
 bin-pair comparison, deep enough that pairwise distances stop being estimates.
 
 ## The pipeline
@@ -60,11 +72,32 @@ Run it:
 ```bash
 python3.11 -m venv .venv && .venv/bin/pip install -e .[dev]
 make test     # sketch engine is verified bit-identical to sourmash
-make all      # sketch → matrix → embed → pairwise → annotate → analyze → figures → site
+make all      # sketch → matrix → embed → pairwise → annotate → analyze → periods → project → figures → site
 ```
 
-Everything runs on one laptop. Data lands in `data/` (~2 GB incl. the genome),
-results in `out/`, the site in `docs/`.
+Everything runs on one laptop. Data lands in `data/` (~5 GB for a base run:
+genome 1 GB, 2-bit codes cache 2.9 GB, one sketch store 1.1 GB; the k-ladder
+and HPRC extras grow it to ~20 GB), results in `out/`, the site in `docs/`.
+
+### Quick start on your own assembly
+
+```bash
+make all                                                    # once: CHM13 store + model (genome and censat auto-download)
+python -m kmer_clust.project triage   asm.fa.gz "my label"  # per-contig compass: placement, orientation, novelty → TSV + PNG
+python -m kmer_clust.project showcase asm.fa.gz "my label"  # fish famous loci out of the whole haplotype → atlas sets
+python -m kmer_clust.project ychrom   asm.fa.gz "my label"  # chrY contig walk
+python -m kmer_clust.bench all                              # re-score the misassembly + read-recruitment claims
+make site                                                   # rebuild docs/index.html with your sets in its panels
+```
+
+Whole-haplotype scans cache as parquet, so re-selection is instant. The
+optional extras: `python -m kmer_clust.kladder` (hours; enables the k-slider
+and paired-vocabulary atlas views), then `python -m kmer_clust.gifs`
+(re-renders `docs/media/`); `pip install -e .[bench]` adds mappy for
+`python -m kmer_clust.bench_real` (see [Benchmarks](#benchmarks-the-claims-quantified)
+for the read-subset provenance); `python -m kmer_clust.population` reads the
+scan caches left by triage. See [DIRECTIONS.md](DIRECTIONS.md) for the
+literature map these tools answer.
 
 ## Design decisions (and why)
 
@@ -83,7 +116,7 @@ results in `out/`, the site in `docs/`.
   can be colored by it.
 - **Abundance kept, IDF kept mild.** Satellite arrays express identity through
   multiplicity of few words (kmer_dust's study: within-bin dedup discards ~74%
-  of live-HOR signal, and reproducibility *rises* with copy number), so weights
+  of live higher-order-repeat (HOR) signal, and reproducibility *rises* with copy number), so weights
   are log1p(multiplicity) × log1p(N/df).
 - **Clusters come from a 12-d UMAP space, display from 2-d.** And a 4×3
   HDBSCAN parameter sweep is part of the report, so "how many clusters" is
@@ -126,7 +159,7 @@ on the atlas page):
 | satellite family recovery, leakage-free¹ (chance) | **96.8%** (29.0%) |
 | satellite semantic accuracy across 4 UMAP seeds | 94.3–94.4% every seed |
 | satellite semantic accuracy at half / quarter sketch depth | 96.3% / 96.4% |
-| HDBSCAN agreement at comparable granularity (full 10× grid) | ARI 0.61 (0.34) |
+| HDBSCAN agreement at comparable granularity | ARI 0.61 (0.34 across the full 10× grid) |
 | model vs exact distance, 1 Mb pairs (Spearman) | ρ 0.54 |
 | live-HOR bins: tandem period from hash spacing alone | **1,364 bp = 7.99 × the 170.8 bp monomer** (85% periodic) |
 | rDNA bins: tandem period from hash spacing alone | **44.8 kb** (the ~45 kb unit) |
@@ -194,323 +227,6 @@ Two additions keep the build annotation-agnostic while articulating the map:
   flat-cluster confidence (**info k15⊕k21**: R² 0.59, best-organized
   euchromatin); concatenating all six k's is dominated by both — redundant
   middle horizons average the ends away. Both winners ship as atlas views.
-
-## Triage: the assembly compass
-
-The first DIRECTIONS use case, shipped:
-
-```bash
-python -m kmer_clust.project triage <assembly.fa.gz> "<label>"
-```
-
-One cached scan (~5 min fresh, seconds cached) produces a per-contig
-table (`out/triage_<tag>.tsv` + JSON), a console summary, and a one-page
-compass figure: every contig painted onto the reference at its dominant
-chromosome span, colored by orientation (sign of τ), opacity by median
-exact J, satellite terrain shaded, low-coverage (novel) runs and
-satellite-terminated ends marked.
-
-![HG002 assembly compass](docs/media/triage_hg002.png)
-
-Headline numbers for the two year-1 drafts: HG002-pat — 98% of windows
-placed confidently, reference breadth 90%, orientation census 46 forward
-/ 45 reverse (contig strand is arbitrary; the compass makes it visible),
-83.8 Mb below coverage 0.9, and **54% of contig ends land in satellite**
-— "death by satellite," previously an anecdote, now a statistic.
-HG005-pat: 99% confident, 60.2 Mb novel, 41% satellite ends. The table
-reproduces every hand-established finding automatically (the chr13
-q-arm contig: reverse, τ −1.0, satellite-terminated, novelty run
-96.1–97.4 Mb at min coverage 0.55 — the centromere entry, rediscovered
-by triage) and surfaces new review candidates (a 59-window contig at
-58% dominant-chromosome, τ −0.4, 5 order jumps). Compared to standard
-QC: needs no reads (unlike Merqury), no alignment (unlike Flagger), and
-reads orientation and order — the balanced events coverage-based tools
-state they cannot see.
-
-## Benchmarks: the claims, quantified
-
-`python -m kmer_clust.bench all` (`out/bench_*.json`) turns the triage
-and recruitment claims into numbers, on synthetic truth cut from CHM13
-itself (spans offset 50 kb from the bin grid so no window equals a
-training bin; euchromatic and satellite strata; seeds fixed).
-
-**Misassembly detection** — 30-window synthetic contigs corrupted with
-an inverted middle block, an interchromosomal misjoin, or a distant
-intrachromosomal misjoin, read back through the projector with two
-alignment-free statistics (adjacent-placement jumps; most-negative
-sliding-window τ):
-
-| stratum | inversion | interchrom misjoin | intrachrom misjoin |
-|---|---|---|---|
-| euchromatin | AUC 0.999 · 98% at 0% FPR | AUC 0.976 · 100% at 2% FPR | AUC 0.978 · 100% at 2% FPR |
-| satellite | AUC 0.947 · 80% at 0% FPR | AUC 0.703 (not usable¹) | AUC 0.573 (not usable¹) |
-
-¹ honest boundary: intact satellite contigs already "jump" between array
-positions (57% control FPR), so the naive jump rule cannot call satellite
-misjoins — while **inversion detection keeps working inside satellite
-DNA**, exactly the balanced-event terrain where coverage-based QC tools
-state they cannot operate.
-
-**Ultralong-read recruitment** — CHM13 fragments at 50/100/200 kb with
-uniform substitution errors at ONT-like rates, random strand:
-
-| stratum | error | top-1 bin | **chromosome** | median J | cover |
-|---|---|---|---|---|---|
-| euchromatin | 0 / 2 / 5% | 98–100% | **100%** | 0.51 / 0.28 / 0.13 | 1.00 / 0.69 / 0.41 |
-| satellite | 0 / 2 / 5% | 56–90% | **94–98%** | 0.66 / 0.22 / 0.10 | 1.00 / 0.62 / 0.45 |
-
-Reads find their chromosome essentially always — including satellite
-reads at 5% error, the centroFlye-style recruitment question answered
-genome-wide with no markers and no HOR annotation. The coverage meter
-simultaneously reads the error rate ((1−p)²¹ ≈ 0.65 at 2%, measured
-0.69) — placement and quality estimation from the same sketch.
-
-**Real ultralong reads** — the real test: 1,200 reads ≥ 50 kb streamed
-from the GIAB HG002 ultralong PromethION run (2019 basecalls — median
-alignment identity 0.90, i.e. **~10% real error**), each placed by the
-projector (9 ms/read) and by minimap2 map-ont (~80 ms/read) against the
-same CHM13 (`python -m kmer_clust.bench_real`):
-
-- Where minimap2 is confident (mapq ≥ 50, non-satellite; n = 1,091):
-  **99.4% chromosome and 98.8% bin-level (±1 window) concordance.**
-- All 6 discordant reads **identify themselves**: their placement margin
-  (top J vs best distant J) is ≈ 1× versus a median 12.5× for correct
-  calls — a margin ≥ 2× rule abstains on every one of them.
-- The 24 reads minimap2 cannot align at all read as 11–28% error on our
-  coverage meter — independently flagged as junk, with the reason.
-- Satellite-landing reads: only 25% get minimap2 mapq ≥ 20 (the
-  documented collapse, live), while our placements agree with minimap2's
-  best guess at 84% chromosome-level.
-- **The error meter**: per-read error estimated from vocabulary coverage
-  alone, err = 1 − cover^(1/21), tracks minimap2's alignment identity at
-  **Pearson r = 0.941** with fit 0.48·x + 0.000 — zero intercept; the
-  slope reflects ONT error clustering (adjacent errors destroy shared
-  k-mers), so one linear calibration makes the sketch a read-quality
-  meter with no alignment and no basecaller QVs.
-
-![Real ultralong reads: error meter and self-identifying errors](docs/media/real_reads.png)
-
-**Across haplotypes (pilot, n = 4)** — the population phase
-(`python -m kmer_clust.population`), computed purely from the cached
-scans of HG002, HG005, HG00733, and HG02723 paternal haplotypes:
-
-![Personal centromeres across four haplotypes](docs/media/pop_centromeres.png)
-
-- **Personal centromeres**: per sample × chromosome, the live-HOR
-  novelty (1 − median vocabulary coverage of centromere-landing
-  windows). **chr13 is the most novel centromere in all four
-  individuals** (0.29–0.37); chr7/9/17/18 stay conserved; per-sample
-  profiles correlate at mean r = 0.51 — a chromosome-intrinsic
-  divergence rate with real individual variation on top (HG00733's
-  chr4 and HG02723's chr17 are personal outliers). This is the
-  Logsdon-style per-individual centromere divergence, read in seconds
-  per haplotype with no HOR annotation and no alignment.
-
-![The acrocentric commons across four haplotypes](docs/media/pop_acro.png)
-
-- **The acrocentric commons, per haplotype**: the fraction of each
-  p-arm's windows carrying a strong second home (J₂ ≥ 0.5 J₁) on a
-  *different* acrocentric. **15p is the most chromosome-specific arm in
-  all four haplotypes** (30–50% promiscuous vs 61–95% elsewhere) —
-  independently confirming, from the query side, the reference-side
-  finding that 15p's distal arm is nearly all specific — while
-  individual structure is real (HG02723's 14p at 95%). Per-window
-  PHR-style cartography, comparable across any number of haplotypes.
-
-The **assembly compass** panel in the atlas makes triage live: contigs
-painted on the reference by orientation, hover for the full row, click
-to light a contig's span up in the map, territory, and thread.
-
-## Methods, precisely
-
-Everything below is implemented in this repository; file names in
-parentheses. Defaults: k = 21, seed 42 throughout.
-
-**Sketching** (`fracminhash.py`). Sequence is 2-bit encoded (case-insensitive;
-k-mers containing non-ACGT bases are dropped). Each k-mer is canonicalized to
-the lexicographic minimum of itself and its reverse complement, hashed with
-MurmurHash3-x64-128 (seed 42, low 64 bits), and kept iff
-h ≤ int(float(2⁶⁴)/scaled) — the float-cast form reproduces sourmash's Rust
-`(u64::MAX as f64 / scaled) as u64` bit-for-bit, and the test suite verifies
-sketches against sourmash itself. The base store keeps, per 100 kb bin at
-scaled = 20 (~5,000 kept hashes per bin): sorted unique hashes, per-hash
-multiplicities, and k-mer start positions. Every other resolution is derived
-without touching sequence again: coarser scaled by threshold cut (the
-FracMinHash containment property), 1 Mb bins by set union of children.
-
-**Track A — the model** (`matrix.py`, `embed_run.py`). At scaled = 50
-(a threshold cut of the base store — exactly equivalent to sketching at 50
-directly), the bins × shared-hashes matrix X has a column for every hash
-with document frequency df ≥ 2; hashes seen in exactly one bin — most of
-euchromatin — are excluded from the model and reported per bin as the
-private fraction (a fraction of *distinct* vocabulary). Entries are
-x_ij = log1p(c_ij) · log1p(N/df_j) with c the within-bin multiplicity and
-N the bin count — a deliberately mild IDF. Rows are L2-normalized. A
-rank-128 randomized subspace SVD (5 QR-stabilized iterations, Rayleigh–Ritz
-on the implicit bin-side Gram operator X Xᵀ, applied in column blocks so
-nothing larger than an n_features × 32 workspace is dense) yields bin
-coordinates Z = UΣ, which preserve row-space geometry (ZZᵀ equals the
-rank-truncated X Xᵀ). Display is UMAP (cosine, n_neighbors 30,
-min_dist 0.08, seed 42) to 2-D; clustering is HDBSCAN
-(min_cluster_size 25, min_samples 10) in a *separate* 12-D UMAP
-(min_dist 0) of the same Z — clusters come from 12-D, the picture from
-2-D, and cluster structure is a property of that embedding, as is standard
-for UMAP+HDBSCAN. Cluster names are assigned after the fact from
-annotation.
-
-**Track B — exact distances** (`pairwise.py`). At 1 Mb (child-set unions,
-base scaled 20), one sparse Boolean product yields all pairwise intersection
-sizes; from them Jaccard J = |A∩B|/|A∪B|, max-containment
-C = |A∩B|/min(|A|,|B|), and cANI = C^(1/k) are computed exactly over the
-sketches (the sketch-level Jaccard itself remains a FracMinHash estimate of
-sequence Jaccard, deep at ~5,000 hashes per 100 kb). GC is base-weighted
-and computed over ACGT bases only. Average-linkage clustering with optimal
-leaf ordering runs on 1−J; the heatmap displays J^(1/3) for contrast.
-
-**Annotation judges, never builds** (`annotate.py`, `analyze.py`). censat
-v2.1 (live HOR = `hor(...L)`), segdup, telomere, and RepeatMasker tracks are
-reduced to per-bin coverage fractions and used only to color and score.
-Classification scores use an adjacency-leakage-free protocol: a
-similarity-weighted vote among the k = 10 nearest cosine neighbors in the
-128-D SVD space, with all same-chromosome bins within ±5 bin positions
-(±500 kb) excluded from the electorate. Chance baselines are the
-majority-class rate of each task's label distribution. Stated precisely:
-the exclusion removes local genomic adjacency, not array membership —
-same-chromosome bins beyond 500 kb, including the continuation of the same
-tandem array, may vote. For αSat → chromosome that long-range support *is*
-the tested signal (a chromosome's HOR vocabulary exists only in its own
-array); for satellite taxonomy, excluding entire chromosomes instead drops
-accuracy from 96.8% to 82.2% — still 2.8× chance on cross-chromosome
-recognition alone. (Mainland dialect R², the other half of the unified
-view protocol, is regressed in the 12-D clustering embedding.)
-
-**Tandem periodicity from hash spacing** (`periodicity.py`). FracMinHash
-subsamples k-mer *types*, not occurrences: once a word wins the lottery,
-every occurrence and its position is recorded. Within a bin, the gaps
-between successive occurrences of the same word (both endpoints in-bin,
-60 bp ≤ gap < 100 kb) therefore sample the true spacing between repeat-unit
-copies. Per bin (≥ 15 gaps), gaps are histogrammed on an 89-band log grid
-(~8.7% per band); the reported period is the median gap within the modal
-band, and periodic strength is that band's share of all gaps. Gaps at
-integer multiples of the unit arise when a word is mutated away in an
-intervening copy, so the mode recovers the unit itself whenever
-adjacent-copy word sharing dominates — the observed regime here. Detection
-is bounded to [60 bp, 100 kb), with power falling as ≈ 1 − P/bin for
-periods P approaching the bin size (relevant to the ~45 kb rDNA unit).
-Recovered without annotation: live-HOR bins at 1,364 bp = 7.99 × the
-170.8 bp alpha-satellite monomer; rDNA bins at 44.8 kb.
-
-**The k-ladder and paired vocabularies** (`kladder.py`, `multik_lab.py`).
-k ∈ {15…25} are full re-sketches. Layouts are Procrustes-aligned (centering,
-rotation, isotropic scale) to the k = 21 frame and quantized into one shared
-coordinate frame so the atlas can morph between them. Paired views
-concatenate two per-k models, each block L2-normalized, so the pair's cosine
-is exactly the mean of the two vocabularies' cosines.
-
-**Projection of new assemblies** (`project.py`). The model is frozen: the
-shared-hash universe, the IDF weights, the SVD basis, and (for the exact
-side) the full store universe. A query window is sketched identically and
-read through two deliberately separate signals:
-
-1. *Word-space placement.* Query weights over the shared vocabulary
-   (log1p(count) · IDF, L2) are folded in via V = XᵀZΣ⁻² — algebraically the
-   right singular vectors — giving 128-D coordinates compared by cosine
-   against row-normalized Z. Windows with fewer than 5 shared-vocabulary
-   matches fall back to exact hits for display.
-2. *Locus assignment.* The window's full sketch (private words included) is
-   intersected with every bin's full sketch; exact set Jaccard — with novel
-   query words counted in the union, penalizing J — ranks candidates. The
-   top 8 hits are chained transitively into loci (same chromosome, gap ≤ 3
-   bins); up to 3 loci are reported, ranked by best member J; fine placement
-   is the J-weighted centroid of the best locus's member bins.
-
-*Vocabulary coverage.* cover = the fraction of the window's kept hashes
-present anywhere in the reference store. Because the keep rule is a
-deterministic function of the k-mer, a kept query hash absent from the
-reference implies the reference genuinely lacks that k-mer — cover is an
-unbiased estimate of the fraction of the window's k-mers shared with the
-reference, and doubles as a novelty detector (the chr13 centromere entry was found this
-way; the KIR window's 20% novelty was read this way).
-
-*Order (τ).* Windows are indexed along their assembly segment and painted by
-that index. Kendall's τ_a between assembly index and position on the
-composite fine axis (per-chromosome [min, max] ± 2 Mb segments at one
-uniform Mb-per-pixel scale; placements within 10 kb — a tenth of a window —
-count as tied and contribute 0) scores collinearity:
-|τ| ≥ 0.85 collinear (inverted if negative), ≥ 0.5 mostly ordered, else
-scrambled. This is a synteny readout with no aligner: parallel ribbons =
-collinear; one full crossing = a reverse-stored contig; a weave = the
-acrocentric commons.
-
-*Validation.* Self-projection of T2T windows offset 50 kb from the bin grid
-(so no query equals a training bin; truth = the window's two overlapping
-bins): exact top-1 97% / top-3 99% on euchromatin, 70% / 92% on
-satellite+acrocentric; shared-vocabulary cosine alone achieves 30% top-1 —
-the measured reason locus assignment uses the exact signal. The CHM13
-self-slice control scores J = 1.000 median and τ = +1.00; for
-assembly-grid windows, offset geometry alone caps exact J at f/(2−f) for
-overlap fraction f.
-
-*Set construction.* A whole haplotype is scanned as every 100 kb window with
-≥ 10 kept hashes (~29–30 k windows, ~10 ms each via gathered sparse ops;
-cached as parquet). Region showcases keep windows whose top-1 exact hit bin
-falls in a named region, take the contig with the most such hits, and fill
-the contiguous span between its first and last hit; sets exceeding 44
-windows are trimmed to the contiguous run maximizing in-region hits (never
-interior-dropped), and the trim is disclosed on the assembly axis.
-One-contig chromosome sets pick, among contigs with ≥ 15 top-1 hits on the
-target chromosome, the one maximizing hits × reference span walked,
-excluding contigs already featured in another set (over 120 windows:
-uniform thinning, disclosed). Hand-cut walks (the chr13 centromere entry)
-are declared with their discovery rule — that one was the global
-lowest-coverage contiguous megabase of the whole scan. Region coordinates
-are anchored on genes located in hs1 via UCSC's catLiftOffGenesV1 track —
-never lifted from GRCh38 by memory.
-
-**Display conventions** (`gifs.py`, `template.html`, fragments). The
-word-space station draws a query at the similarity-weighted center of its
-cosine hits (weight 1/(1.0001−s)) — a display device only; no metric uses
-it. The fine axis excises unmatched chromosomes but preserves one uniform
-scale, with the zoom factor (genome Mb / shown Mb) printed. Satellite
-shading under the axis is censat annotation in its judging role.
-
-**Limitations.** 100 kb windows set the resolution floor (KIR-scale
-paralogy is sub-window); exact J between offset grids is bounded by
-f/(2−f) even at perfect identity; the model deliberately excludes private
-vocabulary, so locus identity rests on the exact track; when a set spans
-chromosomes, cross-segment window pairs (35–60% of pairs in the
-acrocentric slices) are ordered by chromosome index on the composite axis,
-so τ there mostly scores *which chromosome* each window claims — the
-intended commons readout, but not pure within-chromosome synteny;
-judged metrics inherit annotation quality; the HPRC inputs are year-1
-drafts, and several findings (fragmented Y, reverse-stored contigs, a
-contig dying in the centromere) are properties of those drafts, reported
-as such.
-
-## Repo layout
-
-| path | what |
-|---|---|
-| `kmer_clust/fracminhash.py` | numba FracMinHash engine (murmur3, canonical k-mers, per-bin stats) |
-| `kmer_clust/sketch_run.py` | genome → sketch store |
-| `kmer_clust/matrix.py` | store → weighted sparse matrix → low-memory randomized SVD |
-| `kmer_clust/embed_run.py` | UMAP + HDBSCAN |
-| `kmer_clust/pairwise.py` | 1 Mb exact pairwise distances, linkage, precomputed clustering |
-| `kmer_clust/annotate.py` | censat/segdup/RepeatMasker/telomere → per-bin fractions |
-| `kmer_clust/analyze.py` | metrics, two-way test, robustness sweeps, A/B accord |
-| `kmer_clust/periodicity.py` | per-bin tandem period from kept-hash spacing |
-| `kmer_clust/structure_lab.py` · `kladder.py` | annotation-free structure experiments; k-slider views |
-| `kmer_clust/figures.py` | static panels |
-| `kmer_clust/site.py` + `template.html` | the self-contained interactive atlas |
-| `tests/` | sourmash bit-parity + toy-scale math checks |
-
-## Data
-
-- Genome: [T2T-CHM13v2.0 analysis set](https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz) (downloaded by `make all` if absent)
-- censat v2.1, segdup, telomere BEDs: cached in `data/` (originals from the
-  [T2T CHM13 annotation bucket](https://github.com/marbl/CHM13))
-- RepeatMasker 4.1.2p1 BED: read from a sibling `kmer_dust/data/cache/` checkout
-  if present; optional (TE fractions are skipped without it)
 
 ## Projection (prototype)
 
@@ -630,6 +346,386 @@ example has a shareable tour GIF in [docs/media/](docs/media/)
 [tour_yq12.gif](docs/media/tour_yq12.gif)). Reproduce with
 `python -m kmer_clust.project showcase <assembly.fa.gz> "<label>"`.
 
+## Triage: the assembly compass
+
+The first use case from the literature map
+([DIRECTIONS.md](DIRECTIONS.md)), shipped:
+
+```bash
+python -m kmer_clust.project triage <assembly.fa.gz> "<label>"
+```
+
+One cached scan (~5 min fresh, seconds cached) produces a per-contig
+table (`out/triage_<tag>.tsv` + JSON), a console summary, and a one-page
+compass figure: every contig painted onto the reference at its dominant
+chromosome span, colored by orientation (the sign of τ, defined above),
+opacity by median exact Jaccard (J), satellite terrain shaded,
+low-coverage (novel) runs and satellite-terminated ends marked.
+
+![HG002 assembly compass](docs/media/triage_hg002.png)
+
+The **assembly compass** panel in the atlas makes this live for every
+scanned sample: contigs painted on the reference by orientation, hover for
+the full triage row, click to light a contig's span up in the map,
+territory, and thread.
+
+Headline numbers for the two year-1 drafts: HG002-pat — 98% of windows
+placed confidently (top exact J ≥ 0.3), reference breadth 90% (fraction of
+reference bins that are some window's top hit), orientation census 46 forward
+/ 45 reverse (contig strand is arbitrary; the compass makes it visible),
+83.8 Mb below vocabulary coverage 0.9 (the fraction of a window's k-mers
+the reference has ever seen — a novelty meter, not read depth), and **54% of contig ends land in satellite**
+— "death by satellite," previously an anecdote, now a statistic.
+HG005-pat: 99% confident, 60.2 Mb novel, 41% satellite ends. The table
+reproduces every hand-established finding automatically (the chr13
+q-arm contig: reverse, τ −1.0, satellite-terminated, novelty run
+96.1–97.4 Mb at min coverage 0.55 — the centromere entry, rediscovered
+by triage) and surfaces new review candidates (a 59-window contig at
+58% dominant-chromosome, τ −0.4, 5 order jumps). Compared to standard
+QC: needs no reads (unlike Merqury), no alignment (unlike Flagger), and
+reads orientation and order — the balanced events coverage-based tools
+state they cannot see.
+
+## Benchmarks: the claims, quantified
+
+`python -m kmer_clust.bench all` (`out/bench_*.json`) turns the triage
+and recruitment claims into numbers, on synthetic truth cut from CHM13
+itself (spans offset 50 kb from the bin grid so no window equals a
+training bin; euchromatic and satellite strata; seeds fixed).
+
+**Misassembly detection** — 30-window synthetic contigs corrupted with
+an inverted middle block, an interchromosomal misjoin, or a distant
+intrachromosomal misjoin, read back through the projector with two
+alignment-free statistics (adjacent-placement jumps; most-negative
+sliding-window τ):
+
+| stratum | inversion | interchrom misjoin | intrachrom misjoin |
+|---|---|---|---|
+| euchromatin | AUC 0.999 · 98% at 0% FPR | AUC 0.976 · 100% at 2.5% FPR (1/40 controls) | AUC 0.978 · 100% at 2.5% FPR |
+| satellite | AUC 0.947 · 80% at 0% FPR | AUC 0.703 (not usable¹) | AUC 0.573 (not usable¹) |
+
+Corruption junctions fall on window boundaries (slightly cleaner than a
+real mid-window chimera — flank-level jumps would still fire), and each
+cell is n = 40 at a single seed (AUC SE ≈ 0.03–0.06; "0% FPR" carries a
+95% upper bound near 9%).
+
+¹ honest boundary: intact satellite contigs already "jump" between array
+positions (57.5% control FPR, 23/40), so the naive jump rule cannot call satellite
+misjoins — while **inversion detection keeps working inside satellite
+DNA**, exactly the balanced-event terrain where coverage-based QC tools
+state they cannot operate.
+
+![Misassembly detection benchmark](docs/media/bench_misassembly.png)
+
+**Ultralong-read recruitment** — CHM13 fragments at 50/100/200 kb with
+uniform substitution errors at ONT-like rates, random strand:
+
+| stratum | error | top-1 bin | **chromosome** | median J | cover |
+|---|---|---|---|---|---|
+| euchromatin | 0 / 2 / 5% | 98–100% | **100%** | 0.35–0.51 / 0.28 / 0.13 | 1.00 / 0.69 / 0.41 |
+| satellite | 0 / 2 / 5% | 56–90% | **94–98%** | 0.66 / 0.22 / 0.10 | 1.00 / 0.62 / 0.45 |
+
+Reads find their chromosome essentially always — including satellite
+reads at 5% error. That is the recruitment question centroFlye answers
+with hand-curated per-chromosome markers, here answered genome-wide with
+no markers and no HOR annotation. The coverage meter simultaneously reads
+the error rate ((1−p)²¹ ≈ 0.65 at 2%; measured 0.69 in euchromatin, 0.62
+in satellite) — placement and quality estimation from the same sketch.
+
+**Real ultralong reads** — the real test: 1,200 reads ≥ 50 kb streamed
+from the GIAB HG002 ultralong PromethION run (2019 basecalls — median
+alignment identity 0.90, i.e. **~10% real error**), each placed by the
+projector (9 ms/read) and by minimap2 map-ont (~80 ms/read) against the
+same CHM13 (`python -m kmer_clust.bench_real`):
+
+- Where minimap2 is confident (mapq ≥ 50, non-satellite; n = 1,091):
+  **99.5% chromosome (1,085/1,091) and 98.8% bin-level (±1 window)
+  concordance.**
+- All 6 discordant reads **identify themselves**: their placement margin
+  (top J vs best distant J) is ≈ 1× versus a median 12.5× for correct
+  calls. A margin ≥ 2× rule abstains on 4.5% of reads (49/1,091 — all 13
+  bin-level discordants, the 6 chromosome-level among them, plus 36
+  correct reads) and the retained set is **100% chromosome-concordant**.
+  The 2× threshold is post hoc on this set (the worst bin-level
+  discordant sits at 1.98×); independent-flowcell validation is the
+  obvious next step, and the margin analysis now ships in
+  `bench_real.py` itself.
+- The 24 reads minimap2 cannot align at all read as 11–28% error on our
+  coverage meter — independently flagged as junk, with the reason.
+- Satellite-landing reads: only 25% get minimap2 mapq ≥ 20 (the
+  documented collapse, live), while our placements agree with minimap2's
+  best guess at 84% chromosome-level.
+- **The error meter**: per-read error estimated from vocabulary coverage
+  alone, err = 1 − cover^(1/21), tracks minimap2's alignment identity at
+  **Pearson r = 0.941** with fit 0.48·x + 0.000 — zero intercept. The
+  sub-unity slope has two measured causes: single-substitution neighbors
+  of repeat-family k-mers genuinely exist elsewhere in the reference
+  (the uniform-error synthetic bench already shows slope ≈ 0.85 with no
+  clustering possible), and ONT's clustered indel errors destroy
+  overlapping k-mers; one linear calibration absorbs both, making the
+  sketch a read-quality meter with no alignment and no basecaller QVs.
+
+![Real ultralong reads: error meter and self-identifying errors](docs/media/real_reads.png)
+
+*1,200 GIAB HG002 ultralong reads: coverage-derived error tracks minimap2
+identity (left, r = 0.94); wrong placements sit at margin ≈ 1× and
+abstain themselves (right).* The read subset is reproducible: stream
+[GM24385_1.fastq.gz](https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/AshkenazimTrio/HG002_NA24385_son/UCSC_Ultralong_OxfordNanopore_Promethion/GM24385_1.fastq.gz)
+and keep the first 1,200 reads ≥ 50 kb (the collector one-liner is in
+`bench_real.py`'s docstring); the minimap2 index builds itself on first
+run.
+
+**Across haplotypes (pilot, n = 4)** — the population phase
+(`python -m kmer_clust.population`), computed purely from the cached
+scans of HG002, HG005, HG00733, and HG02723 paternal haplotypes:
+
+![Personal centromeres across four haplotypes](docs/media/pop_centromeres.png)
+
+- **Personal centromeres**: per sample × chromosome, the live-HOR
+  novelty (1 − median vocabulary coverage of centromere-landing
+  windows). **chr13 is the most novel centromere in all four
+  individuals** (0.29–0.37); chr9/16/18 stay conserved in all four
+  (mean novelty 0.06–0.08) and chr7/chr17 in three of four; per-sample
+  profiles correlate at mean r = 0.51, though largely via chr13
+  (r = 0.31 with chr13 excluded) — a partly chromosome-intrinsic
+  divergence rate with real personal outliers on top (largest
+  residuals: chr8 in HG002 and HG02723, chr7 in HG005, chr4 in
+  HG00733). This is the
+  Logsdon-style per-individual centromere divergence, read in seconds
+  per haplotype with no HOR annotation and no alignment.
+
+![The acrocentric commons across four haplotypes](docs/media/pop_acro.png)
+
+- **The acrocentric commons, per haplotype**: the fraction of each
+  p-arm's windows carrying a strong second home (J₂ ≥ 0.5 J₁) on a
+  *different* acrocentric, among the top-8 stored hits. **15p is the
+  most chromosome-specific arm in all four haplotypes** (30–50%
+  promiscuous vs 61–95% elsewhere) — independently confirming, from the
+  query side, the reference-side finding that 15p's distal arm is nearly
+  all specific. One honest asymmetry, now marked on the figure: 43–57%
+  of 15p windows are *censored* by the hit-list depth (every stored hit
+  same-chromosome with the list still above the bar at rank 8, mostly
+  hsat3 — reference-side specific, so the ranking is likely but is a
+  censored lower bound) — while
+  individual structure is real (HG02723's 14p at 95%, though n = 19
+  windows — the panel's smallest cell). Per-window cartography of the
+  pseudo-homologous regions (PHRs, Guarracino et al. 2023 — see
+  [DIRECTIONS.md](DIRECTIONS.md)), comparable across any number of
+  haplotypes.
+
+## Methods, precisely
+
+Everything below is implemented in this repository; file names in
+parentheses. Defaults: k = 21, seed 42 throughout.
+
+**Sketching** (`fracminhash.py`). Sequence is 2-bit encoded (case-insensitive;
+k-mers containing non-ACGT bases are dropped). Each k-mer is canonicalized to
+the lexicographic minimum of itself and its reverse complement, hashed with
+MurmurHash3-x64-128 (seed 42, low 64 bits), and kept iff
+h ≤ int(float(2⁶⁴)/scaled) — the float-cast form reproduces sourmash's Rust
+`(u64::MAX as f64 / scaled) as u64` bit-for-bit, and the test suite verifies
+sketches against sourmash itself. The base store keeps, per 100 kb bin at
+scaled = 20 (~5,000 kept hashes per bin): sorted unique hashes, per-hash
+multiplicities, and k-mer start positions. Every other resolution is derived
+without touching sequence again: coarser scaled by threshold cut (the
+FracMinHash containment property), 1 Mb bins by set union of children.
+
+**Track A — the model** (`matrix.py`, `embed_run.py`). At scaled = 50
+(a threshold cut of the base store — exactly equivalent to sketching at 50
+directly), the bins × shared-hashes matrix X has a column for every hash
+with document frequency df ≥ 2; hashes seen in exactly one bin — most of
+euchromatin — are excluded from the model and reported per bin as the
+private fraction (a fraction of *distinct* vocabulary). Entries are
+x_ij = log1p(c_ij) · log1p(N/df_j) with c the within-bin multiplicity and
+N the bin count — a deliberately mild IDF. Rows are L2-normalized. A
+rank-128 randomized subspace SVD (5 QR-stabilized iterations, Rayleigh–Ritz
+on the implicit bin-side Gram operator X Xᵀ, applied in column blocks so
+nothing larger than an n_features × 32 workspace is dense) yields bin
+coordinates Z = UΣ, which preserve row-space geometry (ZZᵀ equals the
+rank-truncated X Xᵀ). Display is UMAP (cosine, n_neighbors 30,
+min_dist 0.08, seed 42) to 2-D; clustering is HDBSCAN
+(min_cluster_size 25, min_samples 10) in a *separate* 12-D UMAP
+(min_dist 0) of the same Z — clusters come from 12-D, the picture from
+2-D, and cluster structure is a property of that embedding, as is standard
+for UMAP+HDBSCAN. Cluster names are assigned after the fact from
+annotation.
+
+**Track B — exact distances** (`pairwise.py`). At 1 Mb (child-set unions,
+base scaled 20), one sparse Boolean product yields all pairwise intersection
+sizes; from them Jaccard J = |A∩B|/|A∪B|, max-containment
+C = |A∩B|/min(|A|,|B|), and cANI = C^(1/k) are computed exactly over the
+sketches (the sketch-level Jaccard itself remains a FracMinHash estimate of
+sequence Jaccard, deep at ~5,000 hashes per 100 kb). GC is base-weighted
+and computed over ACGT bases only. Average-linkage clustering with optimal
+leaf ordering runs on 1−J; the heatmap displays J^(1/3) for contrast.
+
+**Annotation judges, never builds** (`annotate.py`, `analyze.py`). censat
+v2.1 (live HOR = `hor(...L)`), segdup, telomere, and RepeatMasker tracks are
+reduced to per-bin coverage fractions and used only to color and score.
+Classification scores use an adjacency-leakage-free protocol: a
+similarity-weighted vote among the k = 10 nearest cosine neighbors in the
+128-D SVD space, with all same-chromosome bins within ±5 bin positions
+(±500 kb) excluded from the electorate. Chance baselines are the
+majority-class rate of each task's label distribution. Stated precisely:
+the exclusion removes local genomic adjacency, not array membership —
+same-chromosome bins beyond 500 kb, including the continuation of the same
+tandem array, may vote. For αSat → chromosome that long-range support *is*
+the tested signal (a chromosome's HOR vocabulary exists only in its own
+array); for satellite taxonomy, excluding entire chromosomes instead drops
+accuracy from 96.8% to 82.2% — still 2.8× chance on cross-chromosome
+recognition alone. (Mainland dialect R² — the other half of the unified
+view protocol — is the 5-fold-CV kNN-regression R² predicting each
+euchromatic bin's Alu, L1, segdup, and GC fractions from its coordinates
+in the 12-D clustering embedding.)
+
+**Tandem periodicity from hash spacing** (`periodicity.py`). FracMinHash
+subsamples k-mer *types*, not occurrences: once a word wins the lottery,
+every occurrence and its position is recorded. Within a bin, the gaps
+between successive occurrences of the same word (both endpoints in-bin,
+60 bp ≤ gap < 100 kb) therefore sample the true spacing between repeat-unit
+copies. Per bin (≥ 15 gaps), gaps are histogrammed on an 89-band log grid
+(~8.7% per band); the reported period is the median gap within the modal
+band, and periodic strength is that band's share of all gaps. Gaps at
+integer multiples of the unit arise when a word is mutated away in an
+intervening copy, so the mode recovers the unit itself whenever
+adjacent-copy word sharing dominates — the observed regime here. Detection
+is bounded to [60 bp, 100 kb), with power falling as ≈ 1 − P/bin for
+periods P approaching the bin size (relevant to the ~45 kb rDNA unit).
+Recovered without annotation: live-HOR bins at 1,364 bp = 7.99 × the
+170.8 bp alpha-satellite monomer; rDNA bins at 44.8 kb.
+
+**The k-ladder and paired vocabularies** (`kladder.py`, `multik_lab.py`).
+k ∈ {15…25} are full re-sketches. Layouts are Procrustes-aligned (centering,
+rotation, isotropic scale) to the k = 21 frame and quantized into one shared
+coordinate frame so the atlas can morph between them. Paired views
+concatenate two per-k models, each block L2-normalized, so the pair's cosine
+is exactly the mean of the two vocabularies' cosines.
+
+**Projection of new assemblies** (`project.py`). The model is frozen: the
+shared-hash universe, the IDF weights, the SVD basis, and (for the exact
+side) the full store universe. A query window is sketched identically and
+read through two deliberately separate signals:
+
+1. *Word-space placement.* Query weights over the shared vocabulary
+   (log1p(count) · IDF, L2) are folded in via V = XᵀZΣ⁻² — algebraically the
+   right singular vectors — giving 128-D coordinates compared by cosine
+   against row-normalized Z. Windows with fewer than 5 shared-vocabulary
+   matches fall back to exact hits for display.
+2. *Locus assignment.* The window's full sketch (private words included) is
+   intersected with every bin's full sketch; exact set Jaccard — with novel
+   query words counted in the union, penalizing J — ranks candidates. The
+   top 8 hits are chained transitively into loci (same chromosome, gap ≤ 3
+   bins); up to 3 loci are reported, ranked by best member J; fine placement
+   is the J-weighted centroid of the best locus's member bins.
+
+*Vocabulary coverage.* cover = the fraction of the window's kept hashes
+present anywhere in the reference store. Because the keep rule is a
+deterministic function of the k-mer, a kept query hash absent from the
+reference implies the reference genuinely lacks that k-mer — cover is an
+unbiased estimate of the fraction of the window's k-mers shared with the
+reference, and doubles as a novelty detector (the chr13 centromere entry was found this
+way; the KIR window's 20% novelty was read this way).
+
+*Order (τ).* Windows are indexed along their assembly segment and painted by
+that index. Kendall's τ_a between assembly index and position on the
+composite fine axis (per-chromosome [min, max] ± 2 Mb segments at one
+uniform Mb-per-pixel scale; placements within 10 kb — a tenth of a window —
+count as tied and contribute 0) scores collinearity:
+|τ| ≥ 0.85 collinear (inverted if negative), ≥ 0.5 mostly ordered, else
+scrambled. This is a synteny readout with no aligner: parallel ribbons =
+collinear; one full crossing = a reverse-stored contig; a weave = the
+acrocentric commons.
+
+*Validation.* Self-projection of T2T windows offset 50 kb from the bin grid
+(so no query equals a training bin; truth = the window's two overlapping
+bins): exact top-1 97% / top-3 99% on euchromatin, 70% / 92% on
+satellite+acrocentric; shared-vocabulary cosine alone achieves 30% top-1 —
+the measured reason locus assignment uses the exact signal. The CHM13
+self-slice control scores J = 1.000 median and τ = +1.00; for
+assembly-grid windows, offset geometry alone caps exact J at f/(2−f) for
+overlap fraction f.
+
+*Set construction.* A whole haplotype is scanned as every 100 kb window with
+≥ 10 kept hashes (~29–30 k windows, ~10 ms each via gathered sparse ops;
+cached as parquet). Region showcases keep windows whose top-1 exact hit bin
+falls in a named region, take the contig with the most such hits, and fill
+the contiguous span between its first and last hit; sets exceeding 44
+windows are trimmed to the contiguous run maximizing in-region hits (never
+interior-dropped), and the trim is disclosed on the assembly axis.
+One-contig chromosome sets pick, among contigs with ≥ 15 top-1 hits on the
+target chromosome, the one maximizing hits × reference span walked,
+excluding contigs already featured in another set (over 120 windows:
+uniform thinning, disclosed). Hand-cut walks (the chr13 centromere entry)
+are declared with their discovery rule — that one was the global
+lowest-coverage contiguous megabase of the whole scan. Region coordinates
+are anchored on genes located in hs1 via UCSC's catLiftOffGenesV1 track —
+never lifted from GRCh38 by memory.
+
+**Display conventions** (`gifs.py`, `template.html`, fragments). The
+word-space station draws a query at the similarity-weighted center of its
+cosine hits (weight 1/(1.0001−s)) — a display device only; no metric uses
+it. The fine axis excises unmatched chromosomes but preserves one uniform
+scale, with the zoom factor (genome Mb / shown Mb) printed. Satellite
+shading under the axis is censat annotation in its judging role.
+
+**Limitations.** 100 kb windows set the resolution floor (KIR-scale
+paralogy is sub-window); exact J between offset grids is bounded by
+f/(2−f) even at perfect identity; the model deliberately excludes private
+vocabulary, so locus identity rests on the exact track; when a set spans
+chromosomes, cross-segment window pairs (35–60% of pairs in the
+acrocentric slices) are ordered by chromosome index on the composite axis,
+so τ there mostly scores *which chromosome* each window claims — the
+intended commons readout, but not pure within-chromosome synteny;
+judged metrics inherit annotation quality; the HPRC inputs are year-1
+drafts, and several findings (fragmented Y, reverse-stored contigs, a
+contig dying in the centromere) are properties of those drafts, reported
+as such.
+
+## Repo layout
+
+| path | what |
+|---|---|
+| `kmer_clust/fracminhash.py` | numba FracMinHash engine (murmur3, canonical k-mers, per-bin stats) |
+| `kmer_clust/sketch_run.py` | genome → sketch store |
+| `kmer_clust/matrix.py` | store → weighted sparse matrix → low-memory randomized SVD |
+| `kmer_clust/embed_run.py` | UMAP + HDBSCAN |
+| `kmer_clust/pairwise.py` | 1 Mb exact pairwise distances, linkage, precomputed clustering |
+| `kmer_clust/annotate.py` | censat/segdup/RepeatMasker/telomere → per-bin fractions |
+| `kmer_clust/analyze.py` | metrics, two-way test, robustness sweeps, A/B accord |
+| `kmer_clust/periodicity.py` | per-bin tandem period from kept-hash spacing |
+| `kmer_clust/structure_lab.py` · `kladder.py` · `multik_lab.py` | annotation-free structure experiments; k-slider and paired-vocabulary views |
+| `kmer_clust/project.py` | frozen-model projection: showcase, chrY walks, triage |
+| `kmer_clust/bench.py` · `bench_real.py` | synthetic misassembly/read benchmarks; real-ONT vs minimap2 |
+| `kmer_clust/population.py` | per-haplotype centromere + acro-commons studies |
+| `kmer_clust/figures.py` | static panels + the triage compass figure |
+| `kmer_clust/gifs.py` | data-rendered k-sweep and projection-tour GIFs |
+| `kmer_clust/site.py` + `template.html` | the self-contained interactive atlas |
+| `kmer_clust/atlas3d.html` · `project.html` · `compass.html` | modular atlas panels (marker-injected; delete a file to remove its panel) |
+| `tests/` | sourmash bit-parity + toy-scale math checks |
+
+## Data
+
+- Genome: [T2T-CHM13v2.0 analysis set](https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz) (downloaded by `make all` if absent)
+- censat v2.1 BED (the judge annotation, **required**): auto-fetched by the
+  annotate stage from the
+  [T2T CHM13 annotation bucket](https://github.com/marbl/CHM13)
+- segdup and telomere BEDs: optional, read from `data/` when present
+  (coverage columns fall back to zero without them)
+- RepeatMasker 4.1.2p1 BED: read from a sibling `kmer_dust/data/cache/` checkout
+  if present; optional (TE fractions are skipped without it)
+- HPRC year-1 query assemblies (HG002/HG005/HG00733/HG02723 paternal):
+  `https://s3-us-west-2.amazonaws.com/human-pangenomics/working/HPRC_PLUS/<sample>/assemblies/year1_f1_assembly_v2_genbank/<sample>.paternal.f1_assembly_v2_genbank.fa.gz`
+  — download, then `python -m kmer_clust.project triage <fa.gz> "<label>"`
+  scans and caches each (population.py reads those caches)
+- GIAB HG002 ultralong ONT reads (real-read benchmark):
+  [GM24385_1.fastq.gz](https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/AshkenazimTrio/HG002_NA24385_son/UCSC_Ultralong_OxfordNanopore_Promethion/GM24385_1.fastq.gz)
+  (streamed subset; see Benchmarks)
+- Another reference instead of CHM13: sketch → matrix → embed → pairwise →
+  periods are reference-agnostic (point `Params.genome` at your FASTA and
+  delete `data/codes/` — the cache is identity-checked but start clean);
+  the judging half (annotate/analyze/figures/site) is CHM13-wired and
+  would need that reference's own annotation
+
 ## Deliberately out of scope
 
 Clustering HPRC assemblies themselves (that's kmer_dust's job — here they
@@ -637,3 +733,11 @@ only *project* onto the frozen CHM13 map), gene annotation, alignment
 baselines, Snakemake/HPC. Future fun that the store already supports:
 more order-aware readouts beyond periodicity, projection at finer window
 sizes, panels of many haplotypes per locus.
+
+## License & citing
+
+MIT ([LICENSE](LICENSE)). If the map, the projector, or the triage compass
+is useful in your work, please cite this repository (a manuscript does not
+exist yet); the sketch engine is sourmash-compatible by construction, so
+cite [sourmash](https://sourmash.readthedocs.io/) for the FracMinHash
+foundations alongside it.

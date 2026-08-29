@@ -37,7 +37,11 @@ def load_samples():
     out = {}
     for p in sorted(OUT.glob("hapscan_*.parquet")):
         tag = p.stem.replace("hapscan_", "")
-        sample = tag.split(".")[0]
+        parts = tag.split(".")
+        sample = parts[0] + (" mat" if "maternal" in parts else
+                             " pat" if "paternal" in parts else "")
+        if sample in out:
+            raise RuntimeError(f"duplicate sample key {sample!r} from {p.name}")
         df = pd.read_parquet(p)
         df["top"] = df["ehits"].str[0]
         df["j1"] = df["ejacc"].str[0]
@@ -77,15 +81,27 @@ def run(params=PARAMS):
             sub = ap[chrom_of[ap["top"]] == ci]
             if len(sub) < MIN_CELL:
                 continue
-            n_prom = 0
+            n_prom = n_censored = 0
             for r in sub.itertuples():
                 j1 = r.j1
+                hit = False
                 for b, j in zip(r.ehits[1:], r.ejacc[1:]):
                     ci2 = chrom_of[b]
                     if ci2 != ci and ci2 in acro_idx and j >= 0.5 * j1:
-                        n_prom += 1
+                        hit = True
                         break
-            row[c] = {"n": len(sub), "promiscuous": round(n_prom / len(sub), 3)}
+                if hit:
+                    n_prom += 1
+                elif all(chrom_of[b] == ci for b in r.ehits) \
+                        and r.ejacc[-1] >= 0.5 * j1:
+                    # every stored hit is same-chromosome and the hit list
+                    # is still above the promiscuity bar at its truncation
+                    # depth — a qualifying alternative below rank 8 cannot
+                    # be excluded
+                    n_censored += 1
+            row[c] = {"n": len(sub),
+                      "promiscuous": round(n_prom / len(sub), 3),
+                      "censored": round(n_censored / len(sub), 3)}
         acro[s] = row
 
     res = {"samples": list(samples), "centromere_cover": cen, "acro_commons": acro}
@@ -132,13 +148,16 @@ def run(params=PARAMS):
     for i in range(len(slist)):
         for j in range(len(ACROS)):
             if A[i, j] == A[i, j]:
-                n = acro[slist[i]][ACROS[j]]["n"]
-                ax.text(j, i, f"{A[i, j]:.0%}\nn={n}", ha="center", va="center",
+                cell = acro[slist[i]][ACROS[j]]
+                n, cfrac = cell["n"], cell.get("censored", 0)
+                txt = f"{A[i, j]:.0%}\nn={n}" + (f"\n(+{cfrac:.0%}?)" if cfrac >= 0.05 else "")
+                ax.text(j, i, txt, ha="center", va="center",
                         fontsize=7,
                         color="white" if A[i, j] > 0.55 * np.nanmax(A) else INK)
     ax.set_title("the acrocentric commons, per haplotype: windows landing on\n"
-                 "each p-arm that carry a strong second home on another "
-                 "acrocentric", fontsize=10, color=INK)
+                 "each p-arm that carry a strong second home on another acrocentric\n"
+                 "(+N%? = censored by the top-8 hit list: alternatives below "
+                 "rank 8 cannot be excluded)", fontsize=9.5, color=INK)
     fig.colorbar(im, ax=ax, shrink=0.8, label="promiscuous fraction")
     fig.tight_layout()
     fig.savefig(OUT / "figs" / "pop_acro.png", bbox_inches="tight",

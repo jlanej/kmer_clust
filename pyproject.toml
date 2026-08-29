@@ -19,10 +19,12 @@ dependencies = [
     "pyarrow>=16",
     "matplotlib>=3.9",
     "pillow>=10",
+    "pynndescent>=0.5",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "sourmash>=4.8", "mmh3>=4"]
+bench = ["mappy>=2.28"]  # bench_real.py only; the pipeline never needs it
 
 [project.scripts]
 kmer-clust = "kmer_clust.__main__:main"

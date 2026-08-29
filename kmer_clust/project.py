@@ -555,7 +555,9 @@ def triage_rows(chrom_idx, bin_mb, sat_mask, results, bin_bp,
         span_lo = float(mbs[on_dom].min()) if dom_n else float("nan")
         span_hi = float(mbs[on_dom].max()) if dom_n else float("nan")
         # orientation: assembly order vs reference position on the dominant chrom
-        if dom_n >= TRIAGE_ORIENT_WIN:
+        if placed.sum() == 0:
+            tau, orient = float("nan"), "unplaced"
+        elif dom_n >= TRIAGE_ORIENT_WIN:
             tau = _tau_a(list(mbs[on_dom]))
             orient = ("forward" if tau >= 0.85 else
                       "reverse" if tau <= -0.85 else
@@ -580,15 +582,16 @@ def triage_rows(chrom_idx, bin_mb, sat_mask, results, bin_bp,
         for k in range(len(ws)):
             low = cov[k] < TRIAGE_NOVEL_COVER
             step = k > 0 and wids[k] == wids[k - 1] + 1
-            if low and cur0 is not None and step:
-                pass
-            elif low:
+            if low and cur0 is not None and not step:
+                runs.append((cur0, k - 1))  # window-id gap splits the run
                 cur0 = k
-            if (not low or k == len(ws) - 1) and cur0 is not None:
-                k1 = k if (low and k == len(ws) - 1) else k - 1
-                if k1 >= cur0:
-                    runs.append((cur0, k1))
+            elif low and cur0 is None:
+                cur0 = k
+            if not low and cur0 is not None:
+                runs.append((cur0, k - 1))
                 cur0 = None
+        if cur0 is not None:
+            runs.append((cur0, len(ws) - 1))
         runs = [(a, b) for a, b in runs if b - a + 1 >= 3]
         best_run = max(runs, key=lambda ab: ab[1] - ab[0], default=None)
         nov = {"novel_frac": round(float((cov < TRIAGE_NOVEL_COVER).mean()), 3)}
@@ -651,6 +654,9 @@ def run_triage(fasta_path, sample: str, params: Params = PARAMS) -> None:
     annot = pd.read_parquet(OUT / f"annot_{params.bin_bp}.parquet")
     sat_mask = (annot["censat_class"] != "").to_numpy()
     rows = triage_rows(chrom_idx, bin_mb, sat_mask, results, params.bin_bp)
+    if not rows:
+        print("triage: no contig reached the minimum window count; nothing to report")
+        return
     summ = triage_summary(rows, results, len(kit.bins), params.bin_bp)
 
     tag = Path(fasta_path).name.removesuffix(".gz").removesuffix(".fa")

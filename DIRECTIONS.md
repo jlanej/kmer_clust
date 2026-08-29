@@ -2,7 +2,11 @@
 
 A literature-grounded map (August 2026) from the field's documented pain
 points in hard-region assembly and assembly-to-reference comparison to
-concrete uses of this repository's machinery. Companion to the README's
+concrete uses of this repository's machinery. Written as a roadmap before
+any of the use cases existed, it now doubles as a claims-versus-literature
+ledger: all but one item have since shipped (✅, with pointers into the
+README), so each section reads "what the field says is broken" against
+"what this repo measurably does about it." Companion to the README's
 [Methods, precisely](README.md#methods-precisely).
 
 ## What the field says is broken
@@ -68,8 +72,8 @@ synteny, not per-window placement, novelty, or satellite-interior behavior.
 
 - **Placement *inside* satellite DNA** without alignment: αSat HOR bins
   identify their chromosome at 92.0% (chance 7.9%) under an
-  adjacency-excluded protocol; a whole Yq12 contig walks the reference in
-  order (τ +0.90) at J ≈ 0.88.
+  adjacency-excluded protocol; a Yq12 contig's 44-window contiguous run walks the reference in
+  order (τ +0.90) at J ≈ 0.88 (the full 87-window contig: τ +0.97).
 - **Balanced-event detection** — the Flagger blind spot — for free: a
   reverse-stored contig reads τ −0.98/−1.00 as a full ribbon crossing;
   order shuffling at 8p23.1 and SMN reads as intermediate τ.
@@ -99,19 +103,20 @@ synteny, not per-window placement, novelty, or satellite-interior behavior.
    `project.py`; output = TSV + a ribbon summary panel. Demo on the
    HG002/HG005 drafts already scanned.
 2. **Ultralong-read locus recruitment.** ✅ *Shipped, including real-data
-   validation on 1,200 GIAB HG002 ultralong reads at ~10% error — see
-   [README § Benchmarks](README.md#benchmarks-the-claims-quantified).* Reads ≥100 kb are the same size
-   as our windows: place raw ONT UL reads by vocabulary (locus + J +
-   coverage + runner-ups), benchmark against Winnowmap2 on reads
-   simulated from T2T including centromeres. Generalizes centroFlye's
-   hand-built marker recruitment into a reference-wide, annotation-free
-   service; useful as a pre-assembly binner and a post-assembly
-   validation stream.
-3. **Misassembly detection, quantified.** ✅ *Shipped — same section.* Inject synthetic misjoins,
-   inversions, and translocations into T2T windows; measure ROC of
-   τ-discordance and locus-discordance detection — including inside
-   satellite arrays where alignment-based detectors cannot operate.
-   Cheap; turns the QC claims into numbers.
+   validation on 1,200 GIAB HG002 ultralong reads at ~10% error against
+   minimap2 map-ont — see
+   [README § Benchmarks](README.md#benchmarks-the-claims-quantified).*
+   Reads ≥ 50 kb are window-sized: raw ONT UL reads place by vocabulary
+   (locus + J + coverage + margin), generalizing centroFlye's hand-built
+   marker recruitment into a reference-wide, annotation-free service.
+   Still open: a Winnowmap2 comparison and satellite-truth read sets.
+3. **Misassembly detection, quantified.** ✅ *Shipped — same section.*
+   Synthetic misjoins and inversions read back through the projector,
+   scored by order jumps and sliding-window τ. Result and boundary:
+   near-perfect in euchromatin; inside satellite arrays **inversions**
+   stay detectable (AUC 0.947 at 0% FPR) while satellite **misjoins**
+   are honestly not callable by the jump rule (57.5% control FPR —
+   intact arrays already jitter).
 4. **PHR cartography across the pangenome.** ✅ *Pilot at n = 4
    haplotypes shipped (`population.py`) — scaling to more samples is one
    download + scan each.* Run the acro machinery over
@@ -133,6 +138,9 @@ synteny, not per-window placement, novelty, or satellite-interior behavior.
 
 ## How others can use it today
 
+- Any assembly → a triage compass in minutes:
+  `python -m kmer_clust.project triage <fa.gz> "<label>"` (per-contig
+  placement, orientation, novelty; TSV + figure + a live atlas panel).
 - Any assembly → this atlas: `python -m kmer_clust.project showcase
   <fa.gz> "<label>"` (regions), `ychrom` (chromosome walks); scans cache
   as parquet.

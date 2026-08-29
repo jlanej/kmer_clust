@@ -996,8 +996,11 @@ document.addEventListener("DOMContentLoaded", () => {
 <h2>Assembly compass <span class="t3d-proto">prototype</span></h2>
 <p class="lede">Draft-assembly triage from one scan, no alignment: every contig is painted onto
 the reference at the span its vocabulary walks, <b>colored by orientation</b> (blue forward, red
-reverse — contig strand is arbitrary, so ~half of each is expected — grey scrambled), opacity by
-median exact&nbsp;J. Lavender terrain marks satellite reference; ▼ flags a low-coverage (novel)
+reverse — contig strand is arbitrary, so ~half of each is expected — lighter shades mostly
+ordered, grey scrambled or too short/unplaced to call), opacity by median exact Jaccard&nbsp;(J).
+Cover = the fraction of a contig's words this reference has ever seen; jumps = adjacent placed
+windows landing on different chromosomes or &gt;5&nbsp;Mb apart (order breaks — or an honest hop
+across an unplaced stretch). Lavender terrain marks satellite reference; ▼ flags a low-coverage (novel)
 run; ▪ marks a contig end that lands in satellite. <b>Hover a contig</b> for its full triage row;
 <b>click</b> to light its reference span up in the map, territory, and thread above. Reproduce for
 any assembly: <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">python -m
@@ -1050,7 +1053,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const summ = P.triage[si].summary;
     document.getElementById("cmp-stats").textContent =
-      `${summ.n_windows.toLocaleString()} windows · ${summ.placed_confident * 100 | 0}% ` +
+      `${summ.n_windows.toLocaleString()} windows · ${Math.round(summ.placed_confident * 100)}% ` +
       `placed · ${summ.novel_mb} Mb novel · ${Math.round(summ.ends_in_satellite * 100)}% ` +
       `of contig ends in satellite`;
   }
@@ -1369,6 +1372,13 @@ next to each other.</figcaption>
     ever seen — is an unbiased novelty meter, because the sketch lottery is a deterministic
     function of the word: an absent word is genuinely absent from the reference. Sets that trim
     or thin their windows say so directly on the assembly axis.</p>
+    <p><b>Triage.</b> The assembly compass scans a whole draft assembly window by window and
+    reports, per contig: its dominant chromosome and the reference span walked; orientation from
+    τ (forward ≥ 0.85, reverse ≤ −0.85, mostly±, else scrambled — or unplaced); the fraction of
+    windows placed confidently (exact J ≥ 0.3); order jumps (adjacent placed windows landing on a
+    different chromosome or &gt; 5 Mb apart); the longest low-coverage (novel) run; and whether
+    each contig end dies in satellite terrain. Nothing here uses an aligner — the same two
+    signals as projection, read per contig.</p>
     <p><b>Views.</b> The <b>k</b> slider re-sketches the genome at each word length 15–25.
     Long words mean identity — a shared 21-mer (4<sup>21</sup> ≈ 1,400× the genome) is evidence of
     common descent — while short words drift toward composition (4<sup>15</sup> is about the

@@ -47,8 +47,16 @@ def iter_fasta_codes(path: Path):
 def iter_chrom_codes(params: Params, use_cache: bool = True):
     """Yield (name, codes) for analysis chromosomes, caching codes as .npy."""
     exclude = set(params.exclude_chroms)
+    gid = f"{params.genome.name}:{params.genome.stat().st_size}" \
+        if params.genome.exists() else ""
     if use_cache and MANIFEST.exists():
         manifest = json.loads(MANIFEST.read_text())
+        if manifest.get("genome", gid) != gid:
+            print("  codes cache was built from a different genome; rebuilding")
+            manifest = None
+    else:
+        manifest = None
+    if manifest is not None:
         for name in manifest["chroms"]:
             if name in exclude:
                 continue
@@ -66,4 +74,4 @@ def iter_chrom_codes(params: Params, use_cache: bool = True):
         if name not in exclude:
             yield name, codes
     if use_cache:
-        MANIFEST.write_text(json.dumps({"chroms": chroms}))
+        MANIFEST.write_text(json.dumps({"chroms": chroms, "genome": gid}))

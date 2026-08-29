@@ -127,6 +127,21 @@ def run(params: Params, bins: pd.DataFrame | None = None) -> pd.DataFrame:
     offsets = bin_offsets(bins)
     bin_bp = params.bin_bp
 
+    if not params.censat.exists():
+        from urllib.request import urlretrieve
+
+        from .config import CENSAT_URL
+
+        print(f"  censat BED missing; fetching {CENSAT_URL}")
+        params.censat.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            urlretrieve(CENSAT_URL, params.censat)
+        except Exception as e:
+            raise FileNotFoundError(
+                f"{params.censat} is required (the judge annotation) and the "
+                f"download failed ({e}). Fetch it manually from {CENSAT_URL}. "
+                "SD/telomere/RepeatMasker BEDs are optional and skipped when "
+                "absent.") from e
     cen = load_bed(params.censat, [0, 1, 2, 3], ["chrom", "start", "end", "name"])
     cen["cls"] = cen["name"].map(censat_class)
     cen = cen[cen["cls"] != ""]

@@ -35,7 +35,7 @@ RNG_SEED = 7
 SLIDE = 7          # windows per local-tau span
 JUMP_MB = 5.0      # adjacent-placement leap that counts as an order jump
 INV_TAU = -0.7     # local-tau operating point for inversion flags
-WIN = 100_000
+WIN = PARAMS.bin_bp  # windows mirror the store's bin size
 
 
 # ---------------------------------------------------------------- helpers

@@ -8,8 +8,11 @@
 <h2>Assembly compass <span class="t3d-proto">prototype</span></h2>
 <p class="lede">Draft-assembly triage from one scan, no alignment: every contig is painted onto
 the reference at the span its vocabulary walks, <b>colored by orientation</b> (blue forward, red
-reverse — contig strand is arbitrary, so ~half of each is expected — grey scrambled), opacity by
-median exact&nbsp;J. Lavender terrain marks satellite reference; ▼ flags a low-coverage (novel)
+reverse — contig strand is arbitrary, so ~half of each is expected — lighter shades mostly
+ordered, grey scrambled or too short/unplaced to call), opacity by median exact Jaccard&nbsp;(J).
+Cover = the fraction of a contig's words this reference has ever seen; jumps = adjacent placed
+windows landing on different chromosomes or &gt;5&nbsp;Mb apart (order breaks — or an honest hop
+across an unplaced stretch). Lavender terrain marks satellite reference; ▼ flags a low-coverage (novel)
 run; ▪ marks a contig end that lands in satellite. <b>Hover a contig</b> for its full triage row;
 <b>click</b> to light its reference span up in the map, territory, and thread above. Reproduce for
 any assembly: <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">python -m
@@ -62,7 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const summ = P.triage[si].summary;
     document.getElementById("cmp-stats").textContent =
-      `${summ.n_windows.toLocaleString()} windows · ${summ.placed_confident * 100 | 0}% ` +
+      `${summ.n_windows.toLocaleString()} windows · ${Math.round(summ.placed_confident * 100)}% ` +
       `placed · ${summ.novel_mb} Mb novel · ${Math.round(summ.ends_in_satellite * 100)}% ` +
       `of contig ends in satellite`;
   }

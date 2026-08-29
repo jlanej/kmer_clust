@@ -13,7 +13,8 @@ GENOME_URL = (
     "assemblies/analysis_set/chm13v2.0.fa.gz"
 )
 
-# Annotations cached by the sibling kmer_dust checkout; copied into data/ by `fetch`.
+# censat (required, auto-fetched by the annotate stage); SD/telomere/RepeatMasker
+# BEDs are optional — read from data/ or a sibling kmer_dust checkout when present.
 KMER_DUST_CACHE = REPO.parent / "kmer_dust" / "data" / "cache"
 CENSAT_URL = (
     "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/"
