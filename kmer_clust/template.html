@@ -416,11 +416,20 @@ next to each other.</figcaption>
     own geometry. The showcase sets in the projection panel run this machinery over an entire
     HPRC haplotype (HG002 paternal, 29,337 windows, ~10 ms each) and keep the windows whose
     best exact locus falls in a famous region; their exact-J levels form a divergence dial —
-    Yq12 ≈0.88 (CHM13's chrY <em>is</em> HG002's), IGH 0.87, SMN and 22q11.2 0.79, MHC 0.63,
+    Yq12 ≈0.88 (CHM13's chrY <em>is</em> HG002's), IGH 0.87, SMN and 22q11.2 0.79, MHC 0.62,
     8p23.1 defensins 0.56, MAPT/17q21.31 0.35 (the H1/H2 inversion: most word-divergent, still
     placed exactly) — and the KIR window of the leukocyte receptor complex carries 20%
     vocabulary CHM13 has never seen, the coverage meter reading a haplotype that differs in
     gene content.</p>
+    <p><b>Order &amp; novelty.</b> Projected windows are painted by their order along the
+    assembly segment (blue → orange), and Kendall's τ between that order and each window's
+    fine placement — placements within 10 kb count as tied — is printed on the fine axis:
+    |τ| ≥ 0.85 collinear (inverted when negative), ≥ 0.5 mostly ordered, else scrambled. The
+    <b>direct</b> view straightens every path into an assembly↔placement ribbon, so order and
+    orientation read at a glance. Coverage — the fraction of a window's words the reference has
+    ever seen — is an unbiased novelty meter, because the sketch lottery is a deterministic
+    function of the word: an absent word is genuinely absent from the reference. Sets that trim
+    or thin their windows say so directly on the assembly axis.</p>
     <p><b>Views.</b> The <b>k</b> slider re-sketches the genome at each word length 15–25.
     Long words mean identity — a shared 21-mer (4<sup>21</sup> ≈ 1,400× the genome) is evidence of
     common descent — while short words drift toward composition (4<sup>15</sup> is about the

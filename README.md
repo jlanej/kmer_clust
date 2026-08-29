@@ -99,8 +99,9 @@ results in `out/`, the site in `docs/`.
   *chromosome-confused* (the arrays recombine across the five acrocentrics).
   A method that secretly encodes position passes the first and fails the
   second; a method blind to fine vocabulary fails the first. kmer_clust passes
-  both — and the alpha-satellite confusions that do occur are chr1↔5↔19,
-  the S1C1/5/19 HOR family those chromosomes genuinely share.
+  both — and the single largest alpha-satellite confusion is chr5↔chr19,
+  within the S1C1/5/19 HOR family those chromosomes genuinely share
+  (23 of 56 errors fall inside the chr1/5/19 family).
 - Satellite families (HSat1A/1B/2/3, alpha live/divergent/monomeric, beta,
   gamma, rDNA) reassemble from across the genome into coherent islands.
 - The euchromatic mainland organizes by repeat dialect and GC, with segdup-rich
@@ -127,7 +128,7 @@ on the atlas page):
 | satellite semantic accuracy at half / quarter sketch depth | 96.3% / 96.4% |
 | HDBSCAN agreement at comparable granularity (full 10× grid) | ARI 0.61 (0.34) |
 | model vs exact distance, 1 Mb pairs (Spearman) | ρ 0.54 |
-| live-HOR bins: tandem period from hash spacing alone | **1,364 bp = 7.99 × the 171 bp monomer** (85% periodic) |
+| live-HOR bins: tandem period from hash spacing alone | **1,364 bp = 7.99 × the 170.8 bp monomer** (85% periodic) |
 | rDNA bins: tandem period from hash spacing alone | **44.8 kb** (the ~45 kb unit) |
 | mainland dialect R² (unified 12-D protocol): k=21 → k=17 | 0.465 → **0.525** (satellites intact) |
 | consensus k17⊕k21: dialect R² / HDBSCAN noise | 0.512 / **2.2%** (vs 33.3% baseline) |
@@ -165,7 +166,7 @@ Two additions keep the build annotation-agnostic while articulating the map:
   "acro p-arms"): for every p-arm bin of chr13/14/15/21/22, the fraction of
   its nearest vocabulary neighbors (own-array adjacency excluded) that come
   from a *different* acrocentric. Mean cross-acro mixing is 57% and
-  neighbor-vote chromosome assignment only 48% — the assembly difficulty of
+  neighbor-vote chromosome assignment only 45.7% — the assembly difficulty of
   these arms, quantified bin by bin. The structure is uneven and specific:
   non-satellite p-arm sequence is 88% interchangeable (the pseudo-homologous
   region), hsat1B 92%, while hsat3 (35%) and rDNA (43%) retain identity;
@@ -188,11 +189,177 @@ Two additions keep the build annotation-agnostic while articulating the map:
 - **Multi-k vocabularies** (`multik_lab.py`): paired views concatenate two
   per-k models, each block L2-normalized so the pair's cosine is exactly the
   mean of the two vocabularies' cosines. Measured verdict: adjacent horizons
-  agree and sharpen clusters (**consensus k17⊕k21**: dialect R² 0.51, 2.4%
-  HDBSCAN noise); complementary horizons maximize information at the cost of
+  agree and sharpen clusters (**consensus k17⊕k21**: dialect R² 0.51, 2.2%
+  HDBSCAN noise in the shipped run); complementary horizons maximize information at the cost of
   flat-cluster confidence (**info k15⊕k21**: R² 0.59, best-organized
   euchromatin); concatenating all six k's is dominated by both — redundant
   middle horizons average the ends away. Both winners ship as atlas views.
+
+## Methods, precisely
+
+Everything below is implemented in this repository; file names in
+parentheses. Defaults: k = 21, seed 42 throughout.
+
+**Sketching** (`fracminhash.py`). Sequence is 2-bit encoded (case-insensitive;
+k-mers containing non-ACGT bases are dropped). Each k-mer is canonicalized to
+the lexicographic minimum of itself and its reverse complement, hashed with
+MurmurHash3-x64-128 (seed 42, low 64 bits), and kept iff
+h ≤ int(float(2⁶⁴)/scaled) — the float-cast form reproduces sourmash's Rust
+`(u64::MAX as f64 / scaled) as u64` bit-for-bit, and the test suite verifies
+sketches against sourmash itself. The base store keeps, per 100 kb bin at
+scaled = 20 (~5,000 kept hashes per bin): sorted unique hashes, per-hash
+multiplicities, and k-mer start positions. Every other resolution is derived
+without touching sequence again: coarser scaled by threshold cut (the
+FracMinHash containment property), 1 Mb bins by set union of children.
+
+**Track A — the model** (`matrix.py`, `embed_run.py`). At scaled = 50
+(a threshold cut of the base store — exactly equivalent to sketching at 50
+directly), the bins × shared-hashes matrix X has a column for every hash
+with document frequency df ≥ 2; hashes seen in exactly one bin — most of
+euchromatin — are excluded from the model and reported per bin as the
+private fraction (a fraction of *distinct* vocabulary). Entries are
+x_ij = log1p(c_ij) · log1p(N/df_j) with c the within-bin multiplicity and
+N the bin count — a deliberately mild IDF. Rows are L2-normalized. A
+rank-128 randomized subspace SVD (5 QR-stabilized iterations, Rayleigh–Ritz
+on the implicit bin-side Gram operator X Xᵀ, applied in column blocks so
+nothing larger than an n_features × 32 workspace is dense) yields bin
+coordinates Z = UΣ, which preserve row-space geometry (ZZᵀ equals the
+rank-truncated X Xᵀ). Display is UMAP (cosine, n_neighbors 30,
+min_dist 0.08, seed 42) to 2-D; clustering is HDBSCAN
+(min_cluster_size 25, min_samples 10) in a *separate* 12-D UMAP
+(min_dist 0) of the same Z — clusters come from 12-D, the picture from
+2-D, and cluster structure is a property of that embedding, as is standard
+for UMAP+HDBSCAN. Cluster names are assigned after the fact from
+annotation.
+
+**Track B — exact distances** (`pairwise.py`). At 1 Mb (child-set unions,
+base scaled 20), one sparse Boolean product yields all pairwise intersection
+sizes; from them Jaccard J = |A∩B|/|A∪B|, max-containment
+C = |A∩B|/min(|A|,|B|), and cANI = C^(1/k) are computed exactly over the
+sketches (the sketch-level Jaccard itself remains a FracMinHash estimate of
+sequence Jaccard, deep at ~5,000 hashes per 100 kb). GC is base-weighted
+and computed over ACGT bases only. Average-linkage clustering with optimal
+leaf ordering runs on 1−J; the heatmap displays J^(1/3) for contrast.
+
+**Annotation judges, never builds** (`annotate.py`, `analyze.py`). censat
+v2.1 (live HOR = `hor(...L)`), segdup, telomere, and RepeatMasker tracks are
+reduced to per-bin coverage fractions and used only to color and score.
+Classification scores use an adjacency-leakage-free protocol: a
+similarity-weighted vote among the k = 10 nearest cosine neighbors in the
+128-D SVD space, with all same-chromosome bins within ±5 bin positions
+(±500 kb) excluded from the electorate. Chance baselines are the
+majority-class rate of each task's label distribution. Stated precisely:
+the exclusion removes local genomic adjacency, not array membership —
+same-chromosome bins beyond 500 kb, including the continuation of the same
+tandem array, may vote. For αSat → chromosome that long-range support *is*
+the tested signal (a chromosome's HOR vocabulary exists only in its own
+array); for satellite taxonomy, excluding entire chromosomes instead drops
+accuracy from 96.8% to 82.2% — still 2.8× chance on cross-chromosome
+recognition alone. (Mainland dialect R², the other half of the unified
+view protocol, is regressed in the 12-D clustering embedding.)
+
+**Tandem periodicity from hash spacing** (`periodicity.py`). FracMinHash
+subsamples k-mer *types*, not occurrences: once a word wins the lottery,
+every occurrence and its position is recorded. Within a bin, the gaps
+between successive occurrences of the same word (both endpoints in-bin,
+60 bp ≤ gap < 100 kb) therefore sample the true spacing between repeat-unit
+copies. Per bin (≥ 15 gaps), gaps are histogrammed on an 89-band log grid
+(~8.7% per band); the reported period is the median gap within the modal
+band, and periodic strength is that band's share of all gaps. Gaps at
+integer multiples of the unit arise when a word is mutated away in an
+intervening copy, so the mode recovers the unit itself whenever
+adjacent-copy word sharing dominates — the observed regime here. Detection
+is bounded to [60 bp, 100 kb), with power falling as ≈ 1 − P/bin for
+periods P approaching the bin size (relevant to the ~45 kb rDNA unit).
+Recovered without annotation: live-HOR bins at 1,364 bp = 7.99 × the
+170.8 bp alpha-satellite monomer; rDNA bins at 44.8 kb.
+
+**The k-ladder and paired vocabularies** (`kladder.py`, `multik_lab.py`).
+k ∈ {15…25} are full re-sketches. Layouts are Procrustes-aligned (centering,
+rotation, isotropic scale) to the k = 21 frame and quantized into one shared
+coordinate frame so the atlas can morph between them. Paired views
+concatenate two per-k models, each block L2-normalized, so the pair's cosine
+is exactly the mean of the two vocabularies' cosines.
+
+**Projection of new assemblies** (`project.py`). The model is frozen: the
+shared-hash universe, the IDF weights, the SVD basis, and (for the exact
+side) the full store universe. A query window is sketched identically and
+read through two deliberately separate signals:
+
+1. *Word-space placement.* Query weights over the shared vocabulary
+   (log1p(count) · IDF, L2) are folded in via V = XᵀZΣ⁻² — algebraically the
+   right singular vectors — giving 128-D coordinates compared by cosine
+   against row-normalized Z. Windows with fewer than 5 shared-vocabulary
+   matches fall back to exact hits for display.
+2. *Locus assignment.* The window's full sketch (private words included) is
+   intersected with every bin's full sketch; exact set Jaccard — with novel
+   query words counted in the union, penalizing J — ranks candidates. The
+   top 8 hits are chained transitively into loci (same chromosome, gap ≤ 3
+   bins); up to 3 loci are reported, ranked by best member J; fine placement
+   is the J-weighted centroid of the best locus's member bins.
+
+*Vocabulary coverage.* cover = the fraction of the window's kept hashes
+present anywhere in the reference store. Because the keep rule is a
+deterministic function of the k-mer, a kept query hash absent from the
+reference implies the reference genuinely lacks that k-mer — cover is an
+unbiased estimate of the fraction of the window's k-mers shared with the
+reference, and doubles as a novelty detector (the chr13 centromere entry was found this
+way; the KIR window's 20% novelty was read this way).
+
+*Order (τ).* Windows are indexed along their assembly segment and painted by
+that index. Kendall's τ_a between assembly index and position on the
+composite fine axis (per-chromosome [min, max] ± 2 Mb segments at one
+uniform Mb-per-pixel scale; placements within 10 kb — a tenth of a window —
+count as tied and contribute 0) scores collinearity:
+|τ| ≥ 0.85 collinear (inverted if negative), ≥ 0.5 mostly ordered, else
+scrambled. This is a synteny readout with no aligner: parallel ribbons =
+collinear; one full crossing = a reverse-stored contig; a weave = the
+acrocentric commons.
+
+*Validation.* Self-projection of T2T windows offset 50 kb from the bin grid
+(so no query equals a training bin; truth = the window's two overlapping
+bins): exact top-1 97% / top-3 99% on euchromatin, 70% / 92% on
+satellite+acrocentric; shared-vocabulary cosine alone achieves 30% top-1 —
+the measured reason locus assignment uses the exact signal. The CHM13
+self-slice control scores J = 1.000 median and τ = +1.00; for
+assembly-grid windows, offset geometry alone caps exact J at f/(2−f) for
+overlap fraction f.
+
+*Set construction.* A whole haplotype is scanned as every 100 kb window with
+≥ 10 kept hashes (~29–30 k windows, ~10 ms each via gathered sparse ops;
+cached as parquet). Region showcases keep windows whose top-1 exact hit bin
+falls in a named region, take the contig with the most such hits, and fill
+the contiguous span between its first and last hit; sets exceeding 44
+windows are trimmed to the contiguous run maximizing in-region hits (never
+interior-dropped), and the trim is disclosed on the assembly axis.
+One-contig chromosome sets pick, among contigs with ≥ 15 top-1 hits on the
+target chromosome, the one maximizing hits × reference span walked,
+excluding contigs already featured in another set (over 120 windows:
+uniform thinning, disclosed). Hand-cut walks (the chr13 centromere entry)
+are declared with their discovery rule — that one was the global
+lowest-coverage contiguous megabase of the whole scan. Region coordinates
+are anchored on genes located in hs1 via UCSC's catLiftOffGenesV1 track —
+never lifted from GRCh38 by memory.
+
+**Display conventions** (`gifs.py`, `template.html`, fragments). The
+word-space station draws a query at the similarity-weighted center of its
+cosine hits (weight 1/(1.0001−s)) — a display device only; no metric uses
+it. The fine axis excises unmatched chromosomes but preserves one uniform
+scale, with the zoom factor (genome Mb / shown Mb) printed. Satellite
+shading under the axis is censat annotation in its judging role.
+
+**Limitations.** 100 kb windows set the resolution floor (KIR-scale
+paralogy is sub-window); exact J between offset grids is bounded by
+f/(2−f) even at perfect identity; the model deliberately excludes private
+vocabulary, so locus identity rests on the exact track; when a set spans
+chromosomes, cross-segment window pairs (35–60% of pairs in the
+acrocentric slices) are ordered by chromosome index on the composite axis,
+so τ there mostly scores *which chromosome* each window claims — the
+intended commons readout, but not pure within-chromosome synteny;
+judged metrics inherit annotation quality; the HPRC inputs are year-1
+drafts, and several findings (fragmented Y, reverse-stored contigs, a
+contig dying in the centromere) are properties of those drafts, reported
+as such.
 
 ## Repo layout
 
@@ -268,10 +435,10 @@ divergence dial across locus biology (exact-Jaccard median, high to low):
 |---|---|---|---|---|
 | **Yq12 heterochromatin** | 44/44 → chrY | 0.88 | +0.90 | CHM13's chrY *is* HG002's — a near-self control; runner-up loci are other spots inside the same satellite ocean, yet the windows still project *in order*: vocabulary resolves a gradient along the array |
 | **IGH** (chr14) | 13/13 → chr14 | 0.87 | +1.00 | germline-variable between people; window J spans 0.25–0.95 |
-| **SMN1/SMN2 · 5q13** | 8/8 → chr5 | 0.79 | +0.54 | the spinal muscular atrophy locus: 7 of 8 windows carry *two* strong homes ~0.9 Mb apart — the near-identical twin blocks — and assembly order shuffles between them |
+| **SMN1/SMN2 · 5q13** | 8/8 → chr5 | 0.79 | +0.46 | the spinal muscular atrophy locus: 7 of 8 windows carry *two* strong homes ~0.9 Mb apart — the near-identical twin blocks — and assembly order shuffles between them |
 | **22q11.2 · DiGeorge/VCFS** | 35/35 → chr22 | 0.79 | −0.91 | the most common microdeletion syndrome region; LCR22 segdups multi-map, and the contig is reverse-stored (another ribbon X) |
 | **KIR / LRC · 19q13.4** | 9/9 → chr19 | 0.46 | −1.00 | the NK-cell immunity complex: low J throughout, and the KIR window itself is 20% *novel* to CHM13 (coverage 0.80) — KIR haplotypes differ in gene content; the contig is reverse-stored, perfectly (a flawless ribbon X) |
-| **MHC / HLA** (chr6) | 44/44 → chr6 | 0.63 | +1.00 | the genome's most polymorphic region — divergent in sequence, colinear in structure, so every window still lands home (one hypervariable window drops to J = 0.09 and *still* places on chr6) |
+| **MHC / HLA** (chr6) | 44/44 → chr6 | 0.62 | +1.00 | the genome's most polymorphic region — divergent in sequence, colinear in structure, so every window still lands home (one hypervariable window drops to J = 0.09 and *still* places on chr6) |
 | **8p23.1 defensins** | 44/44 → chr8 | 0.56 | +0.67 | inversion flanked by copy-number-variable segdup clusters — the one showcase locus whose window *order* shuffles |
 | **MAPT / 17q21.31** | 15/15 → chr17 | 0.35 | +1.00 | the H1/H2 inversion polymorphism — most word-divergent locus here, yet placed exactly and in order |
 | **chr13 centromere entry** | 29/30 → chr13, 1 → chr21 | 0.53 | −0.76 | a *data-driven* discovery: the assembly's lowest-coverage contiguous megabase turned out to be a contig descending into the chr13 live αSat array — coverage crashes 1.00 → 0.55 as HOR variants CHM13 lacks appear (a personal centromere), one window lands on the chr13/21-shared HOR family, and the contig ends inside the array. The contig is [JAHKSE010000070.1](https://www.ncbi.nlm.nih.gov/nuccore/JAHKSE010000070.1) — 97.5 Mb spanning the whole chr13 q-arm, opening on telomere repeat and dying in the centromere; the set shows its final 3 Mb (positions 94.4–97.4 Mb) |
@@ -290,11 +457,15 @@ world-line into an assembly ↔ placement ribbon — a classic synteny
 ribbon plot, derived without an aligner: parallel ribbons = collinear,
 one full crossing = a reverse-oriented contig, a weave = the commons. The CHM13 self-control scores a
 perfect +1.00, and the three chr21-acro haplotype slices form a
-scrambling dial: HG00097 h1 +0.95, h2 +0.71, NA19909 h2 **−0.19** — the
+scrambling dial: HG00097 h1 +0.95, h2 +0.72, NA19909 h2 **−0.19** — the
 acrocentric commons, now measurable as lost ordering.
 
-Each set is one *contiguous* assembly segment (windows between the first and
-last region hit all stay in), so the assembly axis has no artificial holes.
+Each set is one *contiguous* assembly segment — the span between the
+region's first and last hit on its dominant contig, in-span non-hit windows
+included — so the assembly axis has no artificial holes. Sets exceeding the
+44-window cap are trimmed to their best contiguous run (never
+interior-dropped); the trim is disclosed on the assembly axis (e.g. Yq12
+shows the best 44 of 87 region-spanning windows).
 
 ### chrY, one contig per sample
 
@@ -308,7 +479,7 @@ skipping contigs already featured in another set.
 | set | contig | windows → top | median J | order τ |
 |---|---|---|---|---|
 | **HG002 pat** (the reference Y *is* HG002's) | 13 Mb walk, chrY 6–19 | 88/89 → chrY | 0.36 | **−0.98** |
-| **HG005 pat** (a different Y lineage) | 36 Mb walk, chrY 24–60 | 47/47 → chrY | 0.64 | +0.97 |
+| **HG005 pat** (a different Y lineage) | 36 Mb walk, chrY 24–60 | 47/47 → chrY | 0.64 | +0.98 |
 
 ![HG002 chrY contig tour](docs/media/tour_y_hg002.gif)
 
@@ -324,10 +495,7 @@ copies add real damage (satellite loci elsewhere on the same Y sit at
 family shared with the acrocentric p-arms (chr14:2.9 / chr15:4.8 /
 chrY:11.3 Mb at J 0.35–0.40) — the acrocentric commons, seen from the Y. **HG005's contig walks 24–60 Mb of a
 different Y lineage in order** (τ +0.97) at lower overlap — *divergence
-without disorder*. A multi-fragment variant that scaffolds *all* of a sample's Y
-contigs by median placement gave τ +0.89 for both samples (and flagged
-the X-transposed region via windows landing at chrX ~90 Mb); the
-one-contig view is what ships, for clarity. Reproduce with
+without disorder*. Reproduce with
 `python -m kmer_clust.project ychrom <assembly.fa.gz> "<label>"`.
 
 Each set ships in the atlas dropdown with a one-line blurb, and every

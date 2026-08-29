@@ -168,8 +168,9 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
     DCOL = [colorsys.hls_to_rgb(((215 + 165 * (i / (nq - 1) if nq > 1 else 0))
                                  % 360) / 360, 0.50, 0.68) for i in range(nq)]
     # Kendall tau: assembly order vs fine-axis position (ties count 0)
-    tau_s = sum(np.sign(F[j][0] - F[i][0]) if abs(F[j][0] - F[i][0]) > 5e-4 else 0
-                for i in range(nq) for j in range(i + 1, nq))
+    tie_fig = 0.01 * per_mb  # placements within 10 kb count as tied
+    tau_s = sum(np.sign(F[j][0] - F[i][0]) if abs(F[j][0] - F[i][0]) > tie_fig
+                else 0 for i in range(nq) for j in range(i + 1, nq))
     tau = tau_s / (nq * (nq - 1) / 2) if nq > 1 else 0.0
     tauv = ("collinear" if tau >= 0.85 else "inverted" if tau <= -0.85 else
             "mostly ordered" if abs(tau) >= 0.5 else "scrambled")
@@ -232,8 +233,11 @@ def gif_tour(set_entry, chroms, chrom_nbins, chrom_off, n_bins, ghost_xy, out_pa
         ax.text(A[-1][0] + 0.008, 0.90, str(nq), fontsize=6.5, color=MUTED,
                 ha="left", va="center")
         if set_entry.get("n_win_all", 0) > nq:
-            ax.text(0.05, 0.877, f"showing {nq} of {set_entry['n_win_all']} "
-                    "windows (uniformly thinned)", fontsize=6, color=MUTED)
+            kind = ("best contiguous run of" if set_entry.get("trim_kind")
+                    == "contiguous-run" else "uniformly thinned from")
+            ax.text(0.05, 0.877, f"showing {nq} windows — {kind} "
+                    f"{set_entry['n_win_all']} spanning the region",
+                    fontsize=6, color=MUTED)
         if stage >= 2 and salpha > 0.3 and direct < 0.98:
             for i, w in enumerate(windows):
                 for li, l in enumerate(w["loci"]):

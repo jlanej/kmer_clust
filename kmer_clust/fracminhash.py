@@ -2,9 +2,9 @@
 
 A k-mer is canonicalized (lexicographic min of forward and reverse complement),
 rendered as uppercase ASCII, hashed with MurmurHash3 x64-128 (seed 42, low 64
-bits), and kept when hash <= round((2^64-1)/scaled) -- the same rule sourmash
-uses, so sketches here are interchangeable with sourmash's and its Jaccard/ANI
-theory applies unchanged.
+bits), and kept when hash <= trunc(float64(2**64)/scaled) — exactly sourmash's
+Rust cast semantics — so sketches here are interchangeable with sourmash's and
+its Jaccard/ANI theory applies unchanged.
 
 Note: inside numba kernels every operand of uint64 arithmetic must already be
 uint64 -- mixing in an int64 silently promotes to float64.

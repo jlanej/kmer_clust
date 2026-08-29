@@ -159,9 +159,10 @@ document.addEventListener("DOMContentLoaded", () => {
     DHUE=QS.map((_,i)=>(215+165*(nq>1? i/(nq-1):0))%360);
     // Kendall tau: assembly order vs fine-axis position (ties count 0)
     let S=0;
+    const tiePx=0.01*(FSEG?FSEG.pxPerMb:50);  // placements within 10 kb tie
     for(let i=0;i<nq;i++) for(let j=i+1;j<nq;j++){
       const d=FXY[j][0]-FXY[i][0];
-      if (Math.abs(d)>0.5) S+=Math.sign(d);
+      if (Math.abs(d)>tiePx) S+=Math.sign(d);
     }
     TAU = nq>1? S/(nq*(nq-1)/2) : 0;
     TAUV = TAU>=0.85?"collinear": TAU<=-0.85?"inverted":
@@ -283,7 +284,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const S0=PR.sets[setIdx];
       if (S0.n_win_all>QS.length){
         ctx.globalAlpha=0.65;
-        ctx.fillText(`showing ${QS.length} of ${S0.n_win_all} windows (uniformly thinned)`, MX, lineAY+16);
+        const kind = S0.trim_kind==="contiguous-run"
+          ? "best contiguous run of" : "uniformly thinned from";
+        ctx.fillText(`showing ${QS.length} windows — ${kind} `+
+          `${S0.n_win_all} spanning the region`, MX, lineAY+16);
       }
     }
     if (!zoom){

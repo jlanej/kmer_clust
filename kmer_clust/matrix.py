@@ -9,7 +9,7 @@ Design notes:
   multiplicity, and IDF is kept mild because ubiquity across bins is already
   informative down-weighting (kmer_dust's representation study).
 - The SVD is a randomized subspace iteration on the implicit Gram operator
-  X X^T, blocked so no dense (n_features x anything) array ever exists.
+  X X^T, blocked so nothing larger than an (n_features x block) workspace is ever dense
 """
 
 import time

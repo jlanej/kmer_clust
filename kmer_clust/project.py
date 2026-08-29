@@ -46,7 +46,7 @@ SHOWCASES = [
     ("def8p", "chr8", 6.5, 13.0, "8p23.1 defensins",
      "an inversion flanked by defensin-cluster segdups — the one showcase locus whose window order shuffles (τ +0.67)"),
     ("smn", "chr5", 70.5, 71.8, "SMN1/SMN2 · 5q13",
-     "the SMA locus: 7 of 8 windows carry TWO strong chr5 homes ~0.9 Mb apart — the SMN1/SMN2 twin blocks (τ +0.54)"),
+     "the SMA locus: 7 of 8 windows carry TWO strong chr5 homes ~0.9 Mb apart — order shuffles between the twins (τ +0.46)"),
     ("lcr22", "chr22", 19.2, 22.5, "22q11.2 · DiGeorge/VCFS",
      "the DiGeorge microdeletion region — LCR22 segdups multi-map while the reverse-stored contig inverts the axis (τ −0.91)"),
     ("lrc_kir", "chr19", 57.15, 58.1, "KIR / LRC · 19q13.4",
@@ -395,6 +395,7 @@ def whole_chrom_set(kit: Kit, results: list, sample: str, chrom: str = "chrY",
            "blurb": blurb, "windows": windows}
     if n_all > cap:
         out["n_win_all"] = n_all
+        out["trim_kind"] = "uniform"
     return out
 
 
@@ -420,9 +421,11 @@ def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
     """Project a WHOLE haplotype and pull out the windows whose best exact
     locus lands in famous T2T regions — the projector locating landmarks in
     an unannotated assembly by vocabulary alone. Each set is one CONTIGUOUS
-    assembly segment: windows between the first and last region hit stay in
-    even when their own best locus falls just outside the region box, so the
-    assembly axis has no artificial holes."""
+    assembly segment: the span between the region's first and last hit on the
+    dominant contig, in-span non-hit windows included, so the assembly axis
+    has no artificial holes. Sets over `cap` windows are trimmed to the best
+    contiguous run (never interior-dropped); the trim is recorded in
+    n_win_all/trim_kind and disclosed on the axis."""
     results = scan_haplotype(kit, fasta_path)
     by_contig = {}
     for n, w, r in results:
@@ -447,7 +450,8 @@ def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
         hs = set(hit_ws[dom])
         lo, hi = min(hs), max(hs)
         members = sorted(w for w in by_contig[dom] if lo <= w <= hi)
-        if len(members) > cap:
+        n_span = len(members)
+        if n_span > cap:
             # trim to the contiguous run keeping the most in-region hits
             # (never punch interior holes by dropping low-J windows)
             best = (-1, -1.0, 0)
@@ -462,8 +466,12 @@ def showcase(kit: Kit, fasta_path, sample: str, cap: int = 44) -> list:
         for w in members:
             windows.append(window_entry(kit, dom, w, by_contig[dom][w],
                                         w * win / 1e6))
-        sets.append({"id": sid, "label": f"{sample} · {label}",
-                     "blurb": blurb, "windows": windows})
+        entry = {"id": sid, "label": f"{sample} · {label}",
+                 "blurb": blurb, "windows": windows}
+        if n_span > cap:
+            entry["n_win_all"] = n_span
+            entry["trim_kind"] = "contiguous-run"
+        sets.append(entry)
         med_cov = float(np.median([w2["cover"] for w2 in windows]))
         print(f"  {label}: {len(windows)} windows from {dom}, "
               f"median cover {med_cov:.2f}")
