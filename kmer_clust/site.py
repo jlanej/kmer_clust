@@ -231,6 +231,17 @@ def build_payload(params: Params) -> dict:
         "bin_mb": params.pairwise_bin_bp // 1_000_000,
     }
 
+    triage_files = sorted(OUT.glob("triage_*.json"))
+    if triage_files:
+        tr = []
+        for p in triage_files:
+            d = json.loads(p.read_text())
+            rows = [{k: v for k, v in r.items() if v is not None}
+                    for r in d["rows"]]
+            tr.append({"sample": d["sample"], "summary": d["summary"],
+                       "rows": rows})
+        payload["triage"] = tr
+
     proj_path = OUT / "projection.json"
     if proj_path.exists():
         proj = json.loads(proj_path.read_text())
@@ -273,6 +284,10 @@ def run(params: Params) -> None:
     frag2 = TEMPLATE.parent / "project.html"
     html = html.replace(
         "<!--__PROJECT__-->", frag2.read_text() if frag2.exists() else ""
+    )
+    frag3 = TEMPLATE.parent / "compass.html"
+    html = html.replace(
+        "<!--__COMPASS__-->", frag3.read_text() if frag3.exists() else ""
     )
     DOCS.mkdir(exist_ok=True)
     out = DOCS / "index.html"

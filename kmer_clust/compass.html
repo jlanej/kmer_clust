@@ -1,0 +1,168 @@
+<!-- ============================================================
+     Assembly compass — modular fragment.
+     Injected by site.py at its marker only when out/triage_*.json
+     exists; delete this file to remove the feature entirely.
+     Reads page globals (P, N, chromOff, CEN, css, toggleSel).
+     ============================================================ -->
+<div class="bleed" id="cmp-section">
+<h2>Assembly compass <span class="t3d-proto">prototype</span></h2>
+<p class="lede">Draft-assembly triage from one scan, no alignment: every contig is painted onto
+the reference at the span its vocabulary walks, <b>colored by orientation</b> (blue forward, red
+reverse — contig strand is arbitrary, so ~half of each is expected — grey scrambled), opacity by
+median exact&nbsp;J. Lavender terrain marks satellite reference; ▼ flags a low-coverage (novel)
+run; ▪ marks a contig end that lands in satellite. <b>Hover a contig</b> for its full triage row;
+<b>click</b> to light its reference span up in the map, territory, and thread above. Reproduce for
+any assembly: <span style="font-family:'IBM Plex Mono',monospace;font-size:13px">python -m
+kmer_clust.project triage &lt;assembly.fa.gz&gt; "&lt;label&gt;"</span>.</p>
+<div class="controls">
+  <select id="cmp-sample" class="selctl" title="which scanned assembly to triage"></select>
+  <span class="lchip" id="cmp-stats" style="cursor:default"></span>
+</div>
+<canvas id="cmp-cv" class="plot" style="height:300px"></canvas>
+<div id="cmp-tip" class="t3d-tip" style="display:none;position:fixed;z-index:30"></div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof P === "undefined" || !P.triage || !P.triage.length) {
+    document.getElementById("cmp-section").remove(); return;
+  }
+  const cv = document.getElementById("cmp-cv"), ctx = cv.getContext("2d");
+  const tip = document.getElementById("cmp-tip");
+  const selEl = document.getElementById("cmp-sample");
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  P.triage.forEach((t, i) => selEl.append(new Option(t.sample, i)));
+  let si = 0, hover = -1, DPR = 1, W = 0, H = 0, SEGS = [];
+  const genomeMb = N * P.meta.bin_bp / 1e6;
+  const satBin = i => (CEN[censat[i]] || "non_sat") !== "non_sat";
+  const OC = () => ({forward: css("--acc") || "#3987e5", "mostly+": "#7fb0ec",
+    reverse: "#d94f26", "mostly-": "#e59a82",
+    scrambled: css("--muted"), short: css("--noise")});
+
+  function size() {
+    const r = cv.getBoundingClientRect();
+    W = r.width || cv.parentElement.getBoundingClientRect().width || 900;
+    H = 300; DPR = devicePixelRatio || 1;
+    cv.width = W * DPR; cv.height = H * DPR;
+  }
+  const MX = 14;
+  const gx = mb => MX + mb / genomeMb * (W - 2 * MX);
+
+  function prep() {
+    const rows = P.triage[si].rows.filter(r =>
+      r.n_win >= 5 && r.dom_chrom >= 0 && r.span_lo != null);
+    SEGS = rows.map(r => {
+      const base = chromOff[r.dom_chrom] * P.meta.bin_bp / 1e6;
+      return {r, a: base + r.span_lo, b: Math.max(base + r.span_hi, base + r.span_lo + 1.5)};
+    }).sort((p, q) => (q.b - q.a) - (p.b - p.a));
+    const lanes = [];
+    for (const s of SEGS) {
+      let li = lanes.findIndex(l => l.every(([a, b]) => s.b + 8 < a || s.a - 8 > b));
+      if (li < 0) { lanes.push([]); li = lanes.length - 1; }
+      lanes[li].push([s.a, s.b]); s.lane = li;
+    }
+    const summ = P.triage[si].summary;
+    document.getElementById("cmp-stats").textContent =
+      `${summ.n_windows.toLocaleString()} windows · ${summ.placed_confident * 100 | 0}% ` +
+      `placed · ${summ.novel_mb} Mb novel · ${Math.round(summ.ends_in_satellite * 100)}% ` +
+      `of contig ends in satellite`;
+  }
+
+  function laneY(l) { return H - 92 - l * 13; }
+
+  function draw() {
+    if (!W) size();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    const muted = css("--muted"), oc = OC();
+    // satellite terrain + reference band
+    ctx.globalAlpha = 0.4; ctx.strokeStyle = "#b39fcb";
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) if (satBin(i)) {
+      const x = gx(i * P.meta.bin_bp / 1e6);
+      ctx.moveTo(x, H - 64); ctx.lineTo(x, H - 34);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 0.75; ctx.strokeStyle = muted;
+    ctx.beginPath(); ctx.moveTo(MX, H - 49); ctx.lineTo(W - MX, H - 49); ctx.stroke();
+    ctx.globalAlpha = 0.6; ctx.fillStyle = muted;
+    ctx.font = "10px 'IBM Plex Mono',monospace";
+    P.meta.chroms.forEach((c, ci) => {
+      const x = gx(chromOff[ci] * P.meta.bin_bp / 1e6);
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath(); ctx.moveTo(x, H - 70); ctx.lineTo(x, H - 28); ctx.stroke();
+      const nB = (ci + 1 < P.meta.chroms.length ? chromOff[ci + 1] : N) - chromOff[ci];
+      ctx.globalAlpha = 0.7;
+      if (nB * P.meta.bin_bp / 1e6 / genomeMb * (W - 2 * MX) > 14)
+        ctx.fillText(c.replace("chr", ""), x + nB * P.meta.bin_bp / 2e6 / genomeMb * (W - 2 * MX) - 4, H - 16);
+    });
+    // contigs
+    for (let i = 0; i < SEGS.length; i++) {
+      const s = SEGS[i], r = s.r, y = laneY(s.lane);
+      const foc = i === hover;
+      ctx.strokeStyle = oc[r.orient] || muted;
+      ctx.lineWidth = foc ? 5 : 3;
+      ctx.globalAlpha = (0.35 + 0.6 * Math.min(r.j_med, 1)) * (hover < 0 || foc ? 1 : 0.35);
+      ctx.beginPath(); ctx.moveTo(gx(s.a), y); ctx.lineTo(gx(s.b), y); ctx.stroke();
+      if (gx(s.b) - gx(s.a) > 8) {
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#7a5fa0";
+        for (const [e, xx] of [["end5", gx(s.a)], ["end3", gx(s.b)]])
+          if (r[e] === "satellite") ctx.fillRect(xx - 1.6, y - 1.6, 3.2, 3.2);
+        if (r.novel_run_mb0 != null) {
+          const xm = (gx(s.a) + gx(s.b)) / 2;
+          ctx.beginPath(); ctx.moveTo(xm - 3, y - 6); ctx.lineTo(xm + 3, y - 6);
+          ctx.lineTo(xm, y - 2); ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha = 1; ctx.lineWidth = 1;
+  }
+
+  function pick(mx, my) {
+    let best = -1, bd = 64;
+    for (let i = 0; i < SEGS.length; i++) {
+      const s = SEGS[i], y = laneY(s.lane);
+      if (mx < gx(s.a) - 4 || mx > gx(s.b) + 4) continue;
+      const d = (my - y) * (my - y);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+
+  cv.addEventListener("pointermove", e => {
+    const r0 = cv.getBoundingClientRect();
+    hover = pick(e.clientX - r0.left, e.clientY - r0.top);
+    draw();
+    if (hover < 0) { tip.style.display = "none"; return; }
+    const r = SEGS[hover].r;
+    const nov = r.novel_run_mb0 != null
+      ? `<div class="row">novel run <b>${r.novel_run_mb0}–${r.novel_run_mb1} Mb</b> (min cover ${r.novel_run_mincov})</div>` : "";
+    tip.innerHTML = `<div class="loc">${r.contig}</div>` +
+      `<div class="row"><b>${P.meta.chroms[r.dom_chrom]}</b>:${r.span_lo}–${r.span_hi} Mb · ` +
+      `${r.mb} Mb in ${r.n_win} windows (${Math.round(r.dom_frac * 100)}% on this chrom)</div>` +
+      `<div class="row">orientation <b>${r.orient}</b> (τ ${r.tau ?? "—"}) · jumps ${r.jumps} · ` +
+      `J ${r.j_med} · cover ${r.cover_med}</div>` + nov +
+      `<div class="row">ends: ${r.end5} / ${r.end3} · click to light this span up above</div>`;
+    tip.style.display = "block";
+    tip.style.left = Math.min(innerWidth - tip.offsetWidth - 10, e.clientX + 14) + "px";
+    tip.style.top = Math.max(8, Math.min(innerHeight - tip.offsetHeight - 10, e.clientY + 14)) + "px";
+  });
+  cv.addEventListener("pointerleave", () => { hover = -1; tip.style.display = "none"; draw(); });
+  cv.addEventListener("click", () => {
+    if (hover < 0) return;
+    const r = SEGS[hover].r;
+    const g0 = chromOff[r.dom_chrom] + Math.floor(r.span_lo / (P.meta.bin_bp / 1e6));
+    const g1 = chromOff[r.dom_chrom] + Math.ceil(r.span_hi / (P.meta.bin_bp / 1e6));
+    const mask = new Uint8Array(N); let k = 0;
+    for (let b = Math.max(0, g0); b <= Math.min(N - 1, g1); b++) { mask[b] = 1; k++; }
+    if (k) toggleSel({type: "bins", mask, n: k});
+  });
+  selEl.onchange = () => { si = +selEl.value; hover = -1; prep(); draw(); };
+  addEventListener("resize", () => { size(); draw(); });
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => draw());
+  new MutationObserver(() => draw()).observe(document.documentElement,
+    {attributes: true, attributeFilter: ["data-theme"]});
+  size(); prep(); draw();
+  window.__cmpDraw = draw; window.__cmpState = () => ({si, n: SEGS.length, hover, W});
+});
+</script>

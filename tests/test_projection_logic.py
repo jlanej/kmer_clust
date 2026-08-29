@@ -160,3 +160,39 @@ def test_triage_summary_counts():
     assert s["n_windows"] == 10 and s["placed_confident"] == 1.0
     assert s["orientation_census"] == {"forward": 1}
     assert s["ends_in_satellite"] == 0.0
+
+
+# ---------------------------------------------------------------- bench
+from kmer_clust.bench import _auc, inject_errors, order_stats, revcomp_codes
+
+
+def test_order_stats_detects_inversion_and_jumps():
+    # clean ascending walk: no jumps, local tau stays +1
+    ci = np.zeros(20, int)
+    mb = np.arange(20) * 0.1
+    j, mloc, g = order_stats(ci, mb)
+    assert j == 0 and mloc == 1.0 and g == 1.0
+    # inverted middle block: min local tau hits -1, no 5 Mb jumps
+    mb2 = mb.copy(); mb2[7:14] = mb2[7:14][::-1]
+    j2, mloc2, _ = order_stats(ci, mb2)
+    assert j2 == 0 and mloc2 == -1.0
+    # chromosome switch counts as a jump
+    ci3 = ci.copy(); ci3[10:] = 1
+    j3, _, _ = order_stats(ci3, mb)
+    assert j3 == 1
+
+
+def test_inject_errors_rate_and_revcomp():
+    rng = np.random.default_rng(0)
+    c = rng.integers(0, 4, 200_000).astype(np.uint8)
+    m = inject_errors(c, 0.02, rng)
+    rate = (m != c).mean()
+    assert 0.015 < rate < 0.025
+    assert (m[c != m] < 4).all()
+    rc = revcomp_codes(np.array([0, 1, 2, 3, 4], np.uint8))
+    assert rc.tolist() == [4, 0, 1, 2, 3]
+
+
+def test_auc_separation():
+    assert _auc(np.zeros(10), np.ones(10)) == 1.0
+    assert abs(_auc(np.arange(10.0), np.arange(10.0)) - 0.5) < 1e-9

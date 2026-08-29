@@ -227,6 +227,48 @@ QC: needs no reads (unlike Merqury), no alignment (unlike Flagger), and
 reads orientation and order — the balanced events coverage-based tools
 state they cannot see.
 
+## Benchmarks: the claims, quantified
+
+`python -m kmer_clust.bench all` (`out/bench_*.json`) turns the triage
+and recruitment claims into numbers, on synthetic truth cut from CHM13
+itself (spans offset 50 kb from the bin grid so no window equals a
+training bin; euchromatic and satellite strata; seeds fixed).
+
+**Misassembly detection** — 30-window synthetic contigs corrupted with
+an inverted middle block, an interchromosomal misjoin, or a distant
+intrachromosomal misjoin, read back through the projector with two
+alignment-free statistics (adjacent-placement jumps; most-negative
+sliding-window τ):
+
+| stratum | inversion | interchrom misjoin | intrachrom misjoin |
+|---|---|---|---|
+| euchromatin | AUC 0.999 · 98% at 0% FPR | AUC 0.976 · 100% at 2% FPR | AUC 0.978 · 100% at 2% FPR |
+| satellite | AUC 0.947 · 80% at 0% FPR | AUC 0.703 (not usable¹) | AUC 0.573 (not usable¹) |
+
+¹ honest boundary: intact satellite contigs already "jump" between array
+positions (57% control FPR), so the naive jump rule cannot call satellite
+misjoins — while **inversion detection keeps working inside satellite
+DNA**, exactly the balanced-event terrain where coverage-based QC tools
+state they cannot operate.
+
+**Ultralong-read recruitment** — CHM13 fragments at 50/100/200 kb with
+uniform substitution errors at ONT-like rates, random strand:
+
+| stratum | error | top-1 bin | **chromosome** | median J | cover |
+|---|---|---|---|---|---|
+| euchromatin | 0 / 2 / 5% | 98–100% | **100%** | 0.51 / 0.28 / 0.13 | 1.00 / 0.69 / 0.41 |
+| satellite | 0 / 2 / 5% | 56–90% | **94–98%** | 0.66 / 0.22 / 0.10 | 1.00 / 0.62 / 0.45 |
+
+Reads find their chromosome essentially always — including satellite
+reads at 5% error, the centroFlye-style recruitment question answered
+genome-wide with no markers and no HOR annotation. The coverage meter
+simultaneously reads the error rate ((1−p)²¹ ≈ 0.65 at 2%, measured
+0.69) — placement and quality estimation from the same sketch.
+
+The **assembly compass** panel in the atlas makes triage live: contigs
+painted on the reference by orientation, hover for the full row, click
+to light a contig's span up in the map, territory, and thread.
+
 ## Methods, precisely
 
 Everything below is implemented in this repository; file names in

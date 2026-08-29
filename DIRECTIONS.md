@@ -98,14 +98,16 @@ synteny, not per-window placement, novelty, or satellite-interior behavior.
    alignment; catches inversions). All machinery exists in
    `project.py`; output = TSV + a ribbon summary panel. Demo on the
    HG002/HG005 drafts already scanned.
-2. **Ultralong-read locus recruitment.** Reads ≥100 kb are the same size
+2. **Ultralong-read locus recruitment.** ✅ *Simulated-read benchmark
+   shipped — see [README § Benchmarks](README.md#benchmarks-the-claims-quantified);
+   real ONT UL fastq validation remains open.* Reads ≥100 kb are the same size
    as our windows: place raw ONT UL reads by vocabulary (locus + J +
    coverage + runner-ups), benchmark against Winnowmap2 on reads
    simulated from T2T including centromeres. Generalizes centroFlye's
    hand-built marker recruitment into a reference-wide, annotation-free
    service; useful as a pre-assembly binner and a post-assembly
    validation stream.
-3. **Misassembly detection, quantified.** Inject synthetic misjoins,
+3. **Misassembly detection, quantified.** ✅ *Shipped — same section.* Inject synthetic misjoins,
    inversions, and translocations into T2T windows; measure ROC of
    τ-discordance and locus-discordance detection — including inside
    satellite arrays where alignment-based detectors cannot operate.
