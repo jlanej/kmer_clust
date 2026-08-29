@@ -290,6 +290,33 @@ same CHM13 (`python -m kmer_clust.bench_real`):
 
 ![Real ultralong reads: error meter and self-identifying errors](docs/media/real_reads.png)
 
+**Across haplotypes (pilot, n = 4)** — the population phase
+(`python -m kmer_clust.population`), computed purely from the cached
+scans of HG002, HG005, HG00733, and HG02723 paternal haplotypes:
+
+![Personal centromeres across four haplotypes](docs/media/pop_centromeres.png)
+
+- **Personal centromeres**: per sample × chromosome, the live-HOR
+  novelty (1 − median vocabulary coverage of centromere-landing
+  windows). **chr13 is the most novel centromere in all four
+  individuals** (0.29–0.37); chr7/9/17/18 stay conserved; per-sample
+  profiles correlate at mean r = 0.51 — a chromosome-intrinsic
+  divergence rate with real individual variation on top (HG00733's
+  chr4 and HG02723's chr17 are personal outliers). This is the
+  Logsdon-style per-individual centromere divergence, read in seconds
+  per haplotype with no HOR annotation and no alignment.
+
+![The acrocentric commons across four haplotypes](docs/media/pop_acro.png)
+
+- **The acrocentric commons, per haplotype**: the fraction of each
+  p-arm's windows carrying a strong second home (J₂ ≥ 0.5 J₁) on a
+  *different* acrocentric. **15p is the most chromosome-specific arm in
+  all four haplotypes** (30–50% promiscuous vs 61–95% elsewhere) —
+  independently confirming, from the query side, the reference-side
+  finding that 15p's distal arm is nearly all specific — while
+  individual structure is real (HG02723's 14p at 95%). Per-window
+  PHR-style cartography, comparable across any number of haplotypes.
+
 The **assembly compass** panel in the atlas makes triage live: contigs
 painted on the reference by orientation, hover for the full row, click
 to light a contig's span up in the map, territory, and thread.

@@ -112,12 +112,15 @@ synteny, not per-window placement, novelty, or satellite-interior behavior.
    τ-discordance and locus-discordance detection — including inside
    satellite arrays where alignment-based detectors cannot operate.
    Cheap; turns the QC claims into numbers.
-4. **PHR cartography across the pangenome.** Run the acro machinery over
+4. **PHR cartography across the pangenome.** ✅ *Pilot at n = 4
+   haplotypes shipped (`population.py`) — scaling to more samples is one
+   download + scan each.* Run the acro machinery over
    many HPRC haplotypes: per-window commons promiscuity and τ per
    haplotype = a population-scale map of the recombining community,
    directly comparable to Guarracino's PHRs and Robertsonian breakpoint
    zones.
-5. **A personal-centromere divergence meter.** The centromere-entry
+5. **A personal-centromere divergence meter.** ✅ *Pilot shipped — same
+   module; chr13 most novel in 4/4 samples.* The centromere-entry
    coverage profile, computed per sample per chromosome, is a fast
    annotation-free divergence index for exactly the variation Logsdon
    describes — a triage statistic for "how different is this individual's
